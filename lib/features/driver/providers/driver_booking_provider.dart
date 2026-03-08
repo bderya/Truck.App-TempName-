@@ -17,6 +17,8 @@ class PendingJobRequest {
 }
 
 /// Provider that listens for new pending bookings and exposes them to nearby drivers.
+/// Trigger: Supabase Realtime (INSERT on bookings). Alternatively wire Socket.io
+/// to set state when a new pending booking is pushed from the server.
 class DriverBookingNotifier extends StateNotifier<PendingJobRequest?> {
   DriverBookingNotifier({
     required this.driverId,

@@ -4,6 +4,7 @@ import 'package:latlong2/latlong.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/constants.dart';
+import '../../models/models.dart';
 import 'route_helper.dart';
 
 /// Vehicle type for UI: Car = standard, Bike = motorcycle, Truck = heavy.
@@ -79,16 +80,22 @@ class _BookingConfirmationScreenState extends State<BookingConfirmationScreen> {
     setState(() => _isMatching = true);
 
     try {
-      await Supabase.instance.client.from('bookings').insert({
-        'client_id': widget.clientId,
-        'pickup_address': widget.pickupAddress,
-        'destination_address': widget.destinationAddress,
-        'pickup_lat': widget.userLocation.latitude,
-        'pickup_lng': widget.userLocation.longitude,
-        'price': _price,
-        'vehicle_type_requested': _vehicleType,
-        'status': 'pending',
-      });
+      final res = await Supabase.instance.client
+          .from('bookings')
+          .insert({
+            'client_id': widget.clientId,
+            'pickup_address': widget.pickupAddress,
+            'destination_address': widget.destinationAddress,
+            'pickup_lat': widget.userLocation.latitude,
+            'pickup_lng': widget.userLocation.longitude,
+            'price': _price,
+            'vehicle_type_requested': _vehicleType,
+            'status': 'pending',
+          })
+          .select()
+          .single();
+
+      final booking = Booking.fromJson(res as Map<String, dynamic>);
 
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -97,7 +104,7 @@ class _BookingConfirmationScreenState extends State<BookingConfirmationScreen> {
           backgroundColor: Colors.green,
         ),
       );
-      Navigator.of(context).pop(true);
+      Navigator.of(context).pop(booking);
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

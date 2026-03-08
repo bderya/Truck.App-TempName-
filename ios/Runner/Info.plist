@@ -38,6 +38,8 @@
 	<string>This app needs location access to find nearby tow trucks.</string>
 	<key>NSLocationAlwaysUsageDescription</key>
 	<string>This app needs location access to track your tow truck.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>This app needs camera access to take pre-pickup damage photos.</string>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
 	<key>UIBackgroundModes</key>

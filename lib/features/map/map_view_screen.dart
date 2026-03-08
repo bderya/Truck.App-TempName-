@@ -1,9 +1,14 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../../models/models.dart';
+import '../../services/driver_tracking_service.dart';
+import '../booking/booking_confirmation_screen.dart';
+import '../tracking/driver_tracking_screen.dart';
 import 'providers/map_providers.dart';
 import 'widgets/booking_bottom_sheet.dart';
 
@@ -16,10 +21,12 @@ class MapViewScreen extends ConsumerStatefulWidget {
 
 class _MapViewScreenState extends ConsumerState<MapViewScreen> {
   final MapController _mapController = MapController();
+  final DriverTrackingService _trackingService = DriverTrackingService();
   LatLng? _userLocation;
   List<TowTruck> _towTrucks = [];
   bool _isLoadingTrucks = false;
   String? _error;
+  StreamSubscription<Booking?>? _bookingSubscription;
 
   static const LatLng _defaultCenter = LatLng(41.0082, 28.9784); // Istanbul
 
@@ -84,6 +91,48 @@ class _MapViewScreenState extends ConsumerState<MapViewScreen> {
         onRefresh: _loadUserLocationAndTrucks,
       ),
     );
+  }
+
+  @override
+  void dispose() {
+    _bookingSubscription?.cancel();
+    _trackingService.dispose();
+    super.dispose();
+  }
+
+  Future<void> _openBookingConfirmation() async {
+    final user = _userLocation;
+    if (user == null) return;
+    final dest = LatLng(
+      user.latitude + 0.03,
+      user.longitude + 0.02,
+    );
+    final result = await Navigator.of(context).push<Booking>(
+      MaterialPageRoute<Booking>(
+        builder: (_) => BookingConfirmationScreen(
+          userLocation: user,
+          destinationLocation: dest,
+          pickupAddress: 'Current location',
+          destinationAddress: 'Destination',
+        ),
+      ),
+    );
+    if (result == null || !mounted) return;
+    _bookingSubscription?.cancel();
+    _bookingSubscription = _trackingService.watchBookingById(result.id).listen((updated) {
+      if (updated?.driverId != null && mounted && _userLocation != null) {
+        _bookingSubscription?.cancel();
+        _bookingSubscription = null;
+        Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (_) => DriverTrackingScreen(
+              booking: updated!,
+              clientLocation: _userLocation!,
+            ),
+          ),
+        );
+      }
+    });
   }
 
   @override
@@ -300,7 +349,7 @@ class _MapViewScreenState extends ConsumerState<MapViewScreen> {
               child: FilledButton.icon(
                 onPressed: _towTrucks.isEmpty || _userLocation == null
                     ? null
-                    : _showBookingSheet,
+                    : _openBookingConfirmation,
                 icon: const Icon(Icons.add_road),
                 label: const Text('Request Tow Truck'),
               ),

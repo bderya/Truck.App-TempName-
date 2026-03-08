@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/providers.dart';
 import 'providers/driver_booking_provider.dart';
+import 'screens/driver_wallet_screen.dart';
+import 'screens/job_navigation_screen.dart';
 import 'widgets/job_request_overlay.dart';
 
 /// Driver app screen. Shows job request overlay when a new pending booking
@@ -18,7 +21,18 @@ class DriverMapScreen extends ConsumerWidget {
       appBar: AppBar(
         title: const Text('Driver - Cekici'),
         actions: [
-          if (driverId != null)
+          if (driverId != null) ...[
+            IconButton(
+              icon: const Icon(Icons.account_balance_wallet_outlined),
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => const DriverWalletScreen(),
+                  ),
+                );
+              },
+              tooltip: 'Earnings',
+            ),
             Padding(
               padding: const EdgeInsets.only(right: 16),
               child: Center(
@@ -28,6 +42,7 @@ class DriverMapScreen extends ConsumerWidget {
                 ),
               ),
             ),
+          ],
         ],
       ),
       body: Stack(
@@ -73,7 +88,7 @@ class DriverMapScreen extends ConsumerWidget {
             JobRequestOverlay(
               booking: pendingJob.booking,
               pickupDistanceKm: pendingJob.pickupDistanceKm,
-              onAccept: () => _onAccept(context, ref),
+              onAccept: () => _onAccept(context, ref, pendingJob),
               onDecline: () => _onDecline(ref),
             ),
         ],
@@ -81,19 +96,37 @@ class DriverMapScreen extends ConsumerWidget {
     );
   }
 
-  Future<void> _onAccept(BuildContext context, WidgetRef ref) async {
+  Future<void> _onAccept(
+    BuildContext context,
+    WidgetRef ref,
+    PendingJobRequest pendingJob,
+  ) async {
     final success =
         await ref.read(driverBookingProvider.notifier).acceptJob();
 
-    if (context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            success
-                ? 'Job accepted!'
-                : 'Failed to accept. Another driver may have taken it.',
+    if (!context.mounted) return;
+    if (success) {
+      final locationService = ref.read(locationServiceProvider);
+      final towTruckId = ref.read(currentDriverTruckProvider).valueOrNull?.id;
+      Navigator.of(context).push(
+        MaterialPageRoute<void>(
+          builder: (_) => JobNavigationScreen(
+            booking: pendingJob.booking,
+            towTruckId: towTruckId,
+            locationService: locationService,
           ),
-          backgroundColor: success ? Colors.green : null,
+        ),
+      );
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Job accepted!'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Failed to accept. Another driver may have taken it.'),
         ),
       );
     }

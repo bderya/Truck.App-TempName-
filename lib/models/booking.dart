@@ -11,6 +11,9 @@ class Booking {
     this.price,
     required this.vehicleTypeRequested,
     this.status = 'pending',
+    this.damagePhotos,
+    this.deliverySignatureUrl,
+    this.endedAt,
     this.createdAt,
     this.updatedAt,
   });
@@ -25,27 +28,45 @@ class Booking {
   final double? price;
   final String vehicleTypeRequested; // 'standard' | 'heavy' | 'motorcycle'
   final String status; // 'pending' | 'accepted' | 'on_the_way' | 'picked_up' | 'completed' | 'cancelled'
+  /// Pre-pickup damage photo URLs (4 required for proof of work).
+  final List<String>? damagePhotos;
+  /// Customer signature image URL at delivery.
+  final String? deliverySignatureUrl;
+  /// When the job was completed (delivery confirmed).
+  final DateTime? endedAt;
   final DateTime? createdAt;
   final DateTime? updatedAt;
 
-  factory Booking.fromJson(Map<String, dynamic> json) => Booking(
-        id: json['id'] as int,
-        clientId: json['client_id'] as int,
-        driverId: json['driver_id'] as int?,
-        pickupAddress: json['pickup_address'] as String,
-        destinationAddress: json['destination_address'] as String,
-        pickupLat: (json['pickup_lat'] as num).toDouble(),
-        pickupLng: (json['pickup_lng'] as num).toDouble(),
-        price: (json['price'] as num?)?.toDouble(),
-        vehicleTypeRequested: json['vehicle_type_requested'] as String,
-        status: json['status'] as String? ?? 'pending',
-        createdAt: json['created_at'] != null
-            ? DateTime.parse(json['created_at'] as String)
-            : null,
-        updatedAt: json['updated_at'] != null
-            ? DateTime.parse(json['updated_at'] as String)
-            : null,
-      );
+  factory Booking.fromJson(Map<String, dynamic> json) {
+    final damagePhotosRaw = json['damage_photos'];
+    List<String>? damagePhotos;
+    if (damagePhotosRaw is List) {
+      damagePhotos = damagePhotosRaw.map((e) => e.toString()).toList();
+    }
+    return Booking(
+      id: json['id'] as int,
+      clientId: json['client_id'] as int,
+      driverId: json['driver_id'] as int?,
+      pickupAddress: json['pickup_address'] as String,
+      destinationAddress: json['destination_address'] as String,
+      pickupLat: (json['pickup_lat'] as num).toDouble(),
+      pickupLng: (json['pickup_lng'] as num).toDouble(),
+      price: (json['price'] as num?)?.toDouble(),
+      vehicleTypeRequested: json['vehicle_type_requested'] as String,
+      status: json['status'] as String? ?? 'pending',
+      damagePhotos: damagePhotos,
+      deliverySignatureUrl: json['delivery_signature_url'] as String?,
+      endedAt: json['ended_at'] != null
+          ? DateTime.parse(json['ended_at'] as String)
+          : null,
+      createdAt: json['created_at'] != null
+          ? DateTime.parse(json['created_at'] as String)
+          : null,
+      updatedAt: json['updated_at'] != null
+          ? DateTime.parse(json['updated_at'] as String)
+          : null,
+    );
+  }
 
   Map<String, dynamic> toJson() => {
         'id': id,
@@ -58,6 +79,9 @@ class Booking {
         if (price != null) 'price': price,
         'vehicle_type_requested': vehicleTypeRequested,
         'status': status,
+        if (damagePhotos != null) 'damage_photos': damagePhotos,
+        if (deliverySignatureUrl != null) 'delivery_signature_url': deliverySignatureUrl,
+        if (endedAt != null) 'ended_at': endedAt!.toIso8601String(),
         if (createdAt != null) 'created_at': createdAt!.toIso8601String(),
         if (updatedAt != null) 'updated_at': updatedAt!.toIso8601String(),
       };
@@ -73,6 +97,9 @@ class Booking {
     double? price,
     String? vehicleTypeRequested,
     String? status,
+    List<String>? damagePhotos,
+    String? deliverySignatureUrl,
+    DateTime? endedAt,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) =>
@@ -88,6 +115,9 @@ class Booking {
         vehicleTypeRequested:
             vehicleTypeRequested ?? this.vehicleTypeRequested,
         status: status ?? this.status,
+        damagePhotos: damagePhotos ?? this.damagePhotos,
+        deliverySignatureUrl: deliverySignatureUrl ?? this.deliverySignatureUrl,
+        endedAt: endedAt ?? this.endedAt,
         createdAt: createdAt ?? this.createdAt,
         updatedAt: updatedAt ?? this.updatedAt,
       );

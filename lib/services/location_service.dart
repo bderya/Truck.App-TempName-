@@ -40,10 +40,10 @@ class LocationService {
 
   /// Starts streaming the driver's GPS coordinates to Supabase every [intervalSeconds].
   /// Updates the [towTruckId] row in [tow_trucks] with current latitude/longitude.
-  /// Call [stopLocationStream] when done (e.g. when driver goes offline).
+  /// Call when a job is active; call [stopLocationStream] when job ends or driver goes offline.
   void startLocationStreamToSupabase({
     required int towTruckId,
-    int intervalSeconds = 10,
+    int intervalSeconds = 5,
   }) {
     stopLocationStream();
 

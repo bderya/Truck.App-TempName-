@@ -28,6 +28,21 @@ dependencies:
   # HTTP for routing APIs (OSRM / Mapbox)
   http: ^1.2.2
 
+  # Audio for driver job alert
+  audioplayers: ^6.1.0
+  # Open maps URL (Google Maps, etc.)
+  url_launcher: ^6.3.0
+
+  # Proof of work: camera + compress + signature
+  image_picker: ^1.0.7
+  flutter_image_compress: ^2.1.0
+  flutter_signature_pad: ^3.0.1
+  path_provider: ^2.1.2
+  path: ^1.9.0
+
+  # Driver wallet & earnings charts
+  fl_chart: ^0.66.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -35,3 +50,5 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/sounds/
