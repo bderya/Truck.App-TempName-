@@ -25,6 +25,9 @@ dependencies:
   # Real-time
   socket_io_client: ^3.0.2
 
+  # HTTP for routing APIs (OSRM / Mapbox)
+  http: ^1.2.2
+
 dev_dependencies:
   flutter_test:
     sdk: flutter

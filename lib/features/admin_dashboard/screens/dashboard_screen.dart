@@ -160,8 +160,8 @@ class _LiveMap extends StatelessWidget {
     final center = points.isEmpty
         ? defaultCenter
         : LatLng(
-            points.map((e) => e.latitude).reduce((a, b) => a + b) / points.length,
-            points.map((e) => e.longitude).reduce((a, b) => a + b) / points.length,
+            points.fold<double>(0, (s, e) => s + e.latitude) / points.length,
+            points.fold<double>(0, (s, e) => s + e.longitude) / points.length,
           );
 
     return ClipRRect(

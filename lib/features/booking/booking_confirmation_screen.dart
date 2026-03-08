@@ -1,0 +1,423 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
+import '../../core/constants.dart';
+import 'route_helper.dart';
+
+/// Vehicle type for UI: Car = standard, Bike = motorcycle, Truck = heavy.
+const _vehicleOptions = [
+  ('car', 'standard', Icons.directions_car_rounded),
+  ('bike', 'motorcycle', Icons.two_wheeler_rounded),
+  ('truck', 'heavy', Icons.local_shipping_rounded),
+];
+
+class BookingConfirmationScreen extends StatefulWidget {
+  const BookingConfirmationScreen({
+    super.key,
+    required this.userLocation,
+    required this.destinationLocation,
+    this.pickupAddress = 'Pickup',
+    this.destinationAddress = 'Destination',
+    this.clientId = 1,
+  });
+
+  final LatLng userLocation;
+  final LatLng destinationLocation;
+  final String pickupAddress;
+  final String destinationAddress;
+  final int clientId;
+
+  @override
+  State<BookingConfirmationScreen> createState() => _BookingConfirmationScreenState();
+}
+
+class _BookingConfirmationScreenState extends State<BookingConfirmationScreen> {
+  List<LatLng> _routePoints = [];
+  bool _routeLoading = true;
+  int _selectedIndex = 0;
+  bool _isMatching = false;
+
+  String get _vehicleType => _vehicleOptions[_selectedIndex].$2;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadRoute();
+  }
+
+  Future<void> _loadRoute() async {
+    final points = await getRoutePoints(
+      originLat: widget.userLocation.latitude,
+      originLng: widget.userLocation.longitude,
+      destLat: widget.destinationLocation.latitude,
+      destLng: widget.destinationLocation.longitude,
+    );
+    if (mounted) setState(() { _routePoints = points; _routeLoading = false; });
+  }
+
+  double get _distanceKm {
+    if (_routePoints.length < 2) return 0;
+    const distance = Distance();
+    double meters = 0;
+    for (int i = 1; i < _routePoints.length; i++) {
+      meters += distance(_routePoints[i - 1], _routePoints[i]);
+    }
+    return meters / 1000;
+  }
+
+  /// Price: (Base + (Distance * Rate)) * Multiplier
+  double get _price {
+    final base = AppConstants.basePriceByVehicleType[_vehicleType] ?? 50;
+    final rate = AppConstants.ratePerKmByVehicleType[_vehicleType] ?? 3.5;
+    final mult = AppConstants.vehicleMultiplierByType[_vehicleType] ?? 1.0;
+    return (base + (_distanceKm * rate)) * mult;
+  }
+
+  Future<void> _startMatching() async {
+    setState(() => _isMatching = true);
+
+    try {
+      await Supabase.instance.client.from('bookings').insert({
+        'client_id': widget.clientId,
+        'pickup_address': widget.pickupAddress,
+        'destination_address': widget.destinationAddress,
+        'pickup_lat': widget.userLocation.latitude,
+        'pickup_lng': widget.userLocation.longitude,
+        'price': _price,
+        'vehicle_type_requested': _vehicleType,
+        'status': 'pending',
+      });
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Tow request sent. Searching for nearby drivers...'),
+          backgroundColor: Colors.green,
+        ),
+      );
+      Navigator.of(context).pop(true);
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to create booking: $e'),
+          backgroundColor: Theme.of(context).colorScheme.error,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _isMatching = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final center = LatLng(
+      (widget.userLocation.latitude + widget.destinationLocation.latitude) / 2,
+      (widget.userLocation.longitude + widget.destinationLocation.longitude) / 2,
+    );
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Confirm booking'),
+      ),
+      body: Column(
+        children: [
+          Expanded(
+            flex: 2,
+            child: Stack(
+              children: [
+                FlutterMap(
+                  options: MapOptions(
+                    initialCenter: center,
+                    initialZoom: 12,
+                    minZoom: 5,
+                    maxZoom: 18,
+                  ),
+                  children: [
+                    TileLayer(
+                      urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                      userAgentPackageName: 'com.cekici.cekici',
+                    ),
+                    if (_routePoints.isNotEmpty)
+                      PolylineLayer(
+                        polylines: [
+                          Polyline(
+                            points: _routePoints,
+                            color: Theme.of(context).colorScheme.primary,
+                            strokeWidth: 5,
+                          ),
+                        ],
+                      ),
+                    MarkerLayer(
+                      markers: [
+                        Marker(
+                          point: widget.userLocation,
+                          width: 32,
+                          height: 32,
+                          child: const CircleAvatar(
+                            backgroundColor: Colors.blue,
+                            child: Icon(Icons.person, color: Colors.white, size: 18),
+                          ),
+                        ),
+                        Marker(
+                          point: widget.destinationLocation,
+                          width: 32,
+                          height: 32,
+                          child: const CircleAvatar(
+                            backgroundColor: Colors.orange,
+                            child: Icon(Icons.flag, color: Colors.white, size: 18),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+                if (_routeLoading)
+                  const Center(
+                    child: CircularProgressIndicator(),
+                  ),
+                if (_isMatching)
+                  Positioned.fill(
+                    child: Stack(
+                      children: [
+                        _RippleOverlay(),
+                        Container(
+                          color: Colors.black26,
+                          child: Center(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const SizedBox(
+                                  width: 56,
+                                  height: 56,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 3,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                                const SizedBox(height: 16),
+                                Text(
+                                  'Searching for nearby drivers...',
+                                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.surfaceContainerHighest,
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.1),
+                  blurRadius: 10,
+                  offset: const Offset(0, -4),
+                ),
+              ],
+            ),
+            child: SafeArea(
+              top: false,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Text(
+                    'Vehicle type',
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.8),
+                        ),
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: List.generate(_vehicleOptions.length, (i) {
+                      final (label, _, icon) = _vehicleOptions[i];
+                      final selected = _selectedIndex == i;
+                      return Expanded(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 4),
+                          child: Material(
+                            color: selected
+                                ? Theme.of(context).colorScheme.primaryContainer
+                                : Theme.of(context).colorScheme.surface,
+                            borderRadius: BorderRadius.circular(12),
+                            child: InkWell(
+                              onTap: () => setState(() => _selectedIndex = i),
+                              borderRadius: BorderRadius.circular(12),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(vertical: 14),
+                                decoration: BoxDecoration(
+                                  borderRadius: BorderRadius.circular(12),
+                                  border: Border.all(
+                                    color: selected
+                                        ? Theme.of(context).colorScheme.primary
+                                        : Colors.transparent,
+                                    width: 2,
+                                  ),
+                                ),
+                                child: Column(
+                                  children: [
+                                    Icon(
+                                      icon,
+                                      size: 28,
+                                      color: selected
+                                          ? Theme.of(context).colorScheme.primary
+                                          : Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7),
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      label == 'car'
+                                          ? 'Car'
+                                          : label == 'bike'
+                                              ? 'Bike'
+                                              : 'Truck',
+                                      style: TextStyle(
+                                        fontWeight: selected ? FontWeight.w600 : FontWeight.w500,
+                                        color: selected
+                                            ? Theme.of(context).colorScheme.primary
+                                            : Theme.of(context).colorScheme.onSurface,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      );
+                    }),
+                  ),
+                  const SizedBox(height: 20),
+                  Text(
+                    'Estimated price',
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.8),
+                        ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '(Base + (Distance × Rate)) × Multiplier',
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          fontStyle: FontStyle.italic,
+                          color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
+                        ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '${_price.toStringAsFixed(0)} ${AppConstants.currencySymbol}',
+                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                          fontWeight: FontWeight.bold,
+                        ),
+                  ),
+                  const SizedBox(height: 24),
+                  FilledButton(
+                    onPressed: _isMatching ? null : _startMatching,
+                    style: FilledButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 18),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                    child: _isMatching
+                        ? const SizedBox(
+                            height: 22,
+                            width: 22,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: Colors.white,
+                            ),
+                          )
+                        : const Text('Request Tow'),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Pulsing ripple overlay on the map during matching.
+class _RippleOverlay extends StatefulWidget {
+  @override
+  State<_RippleOverlay> createState() => _RippleOverlayState();
+}
+
+class _RippleOverlayState extends State<_RippleOverlay>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _animation;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1500),
+    )..repeat();
+    _animation = Tween<double>(begin: 0.3, end: 0.8).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: _animation,
+      builder: (context, child) {
+        return CustomPaint(
+          painter: _RipplePainter(
+            progress: _animation.value,
+            color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.15),
+          ),
+          size: Size.infinite,
+        );
+      },
+    );
+  }
+}
+
+class _RipplePainter extends CustomPainter {
+  _RipplePainter({required this.progress, required this.color});
+
+  final double progress;
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final center = Offset(size.width / 2, size.height / 2);
+    final maxRadius = (size.width + size.height) * 0.3 * progress;
+    final paint = Paint()
+      ..color = color
+      ..style = PaintingStyle.fill;
+    canvas.drawCircle(center, maxRadius, paint);
+    final strokePaint = Paint()
+      ..color = color.withValues(alpha: 0.4)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2;
+    canvas.drawCircle(center, maxRadius, strokePaint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _RipplePainter old) => old.progress != progress;
+}

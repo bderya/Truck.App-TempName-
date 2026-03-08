@@ -1,7 +1,9 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'admin_app.dart';
 import 'features/admin/admin_approval_screen.dart';
 import 'features/driver/driver_home_screen.dart';
 import 'features/map/map_view_screen.dart';
@@ -16,13 +18,14 @@ void main() async {
 
   runApp(
     const ProviderScope(
-      child: _HomeSelector(),
+      child: kIsWeb ? AdminApp() : _MobileApp(),
     ),
   );
 }
 
-class _HomeSelector extends ConsumerWidget {
-  const _HomeSelector();
+/// Mobile/desktop: app switcher (Customer, Driver, Admin approval).
+class _MobileApp extends ConsumerWidget {
+  const _MobileApp();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
