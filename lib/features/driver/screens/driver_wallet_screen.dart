@@ -1,84 +1,105 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/constants.dart';
+import '../../../core/providers.dart';
 import '../../../models/models.dart';
 import 'providers/driver_booking_provider.dart';
 import 'providers/driver_earnings_provider.dart';
+import 'providers/wallet_provider.dart';
 
-/// Driver Wallet & Earnings Report: dashboard cards, weekly chart, transaction list, date filter.
-class DriverWalletScreen extends ConsumerWidget {
+/// Driver Wallet: real-time balance card, withdraw button, line chart (7 days), transaction list.
+class DriverWalletScreen extends ConsumerStatefulWidget {
   const DriverWalletScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final todayAsync = ref.watch(todayEarningsProvider);
-    final weekAsync = ref.watch(weekEarningsProvider);
-    final filter = ref.watch(earningsFilterProvider);
-    final bookingsAsync = ref.watch(driverEarningsBookingsProvider);
-    final trendAsync = ref.watch(weeklyTrendProvider);
+  ConsumerState<DriverWalletScreen> createState() => _DriverWalletScreenState();
+}
+
+class _DriverWalletScreenState extends ConsumerState<DriverWalletScreen> {
+  RealtimeChannel? _walletChannel;
+
+  @override
+  void dispose() {
+    _walletChannel?.unsubscribe();
+    super.dispose();
+  }
+
+  void _subscribeWalletRealtime(int walletId) {
+    _walletChannel?.unsubscribe();
+    final client = ref.read(supabaseClientProvider);
+    _walletChannel = client
+        .channel('wallet-$walletId')
+        .onPostgresChanges(
+          schema: 'public',
+          table: 'wallets',
+          event: PostgresChangeEvent.update,
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'id',
+            value: walletId,
+          ),
+          callback: (_) {
+            ref.invalidate(driverWalletProvider);
+            ref.invalidate(driverTransactionsProvider);
+          },
+        )
+        .subscribe();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final walletAsync = ref.watch(driverWalletProvider);
+    final transactionsAsync = ref.watch(driverTransactionsProvider);
+
+    walletAsync.whenData((wallet) {
+      if (wallet != null && _walletChannel == null) {
+        _subscribeWalletRealtime(wallet.id);
+      }
+    });
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Earnings'),
+        title: Text('wallet'.tr()),
       ),
       body: RefreshIndicator(
         onRefresh: () async {
+          ref.invalidate(driverWalletProvider);
+          ref.invalidate(driverTransactionsProvider);
           final driverId = ref.read(driverIdProvider);
-          if (driverId != null) {
-            ref.invalidate(driverCompletedBookingsProvider(driverId));
-          }
+          if (driverId != null) ref.invalidate(driverCompletedBookingsProvider(driverId));
         },
         child: ListView(
           padding: const EdgeInsets.all(16),
           children: [
-            Row(
-              children: [
-                Expanded(
-                  child: _EarningsCard(
-                    title: "Today's Earnings",
-                    asyncValue: todayAsync,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _EarningsCard(
-                    title: "This Week's Total",
-                    asyncValue: weekAsync,
-                  ),
-                ),
-              ],
+            walletAsync.when(
+              data: (wallet) => _BalanceCard(wallet: wallet),
+              loading: () => const _BalanceCardShimmer(),
+              error: (_, __) => const _BalanceCard(wallet: null),
+            ),
+            const SizedBox(height: 16),
+            walletAsync.when(
+              data: (wallet) => _WithdrawButton(wallet: wallet),
+              loading: () => const SizedBox.shrink(),
+              error: (_, __) => const SizedBox.shrink(),
             ),
             const SizedBox(height: 24),
             Text(
-              'Filter by',
-              style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7),
+              'last_7_days'.tr(),
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
                   ),
-            ),
-            const SizedBox(height: 8),
-            SegmentedButton<EarningsFilter>(
-              segments: const [
-                ButtonSegment(value: EarningsFilter.day, label: Text('Day'), icon: Icon(Icons.today)),
-                ButtonSegment(value: EarningsFilter.week, label: Text('Week'), icon: Icon(Icons.date_range)),
-                ButtonSegment(value: EarningsFilter.month, label: Text('Month'), icon: Icon(Icons.calendar_month)),
-              ],
-              selected: {filter},
-              onSelectionChanged: (s) => ref.read(earningsFilterProvider.notifier).state = s.first,
-            ),
-            const SizedBox(height: 24),
-            Text(
-              'Weekly trend',
-              style: Theme.of(context).textTheme.titleMedium,
             ),
             const SizedBox(height: 8),
             SizedBox(
               height: 200,
-              child: trendAsync.when(
-                data: (values) => _WeeklyBarChart(values: values),
+              child: transactionsAsync.when(
+                data: (txns) => _EarningsLineChart(transactions: txns),
                 loading: () => const Center(child: CircularProgressIndicator()),
-                error: (_, __) => const Center(child: Text('Could not load chart')),
+                error: (_, __) => Center(child: Text('chart_load_error'.tr())),
               ),
             ),
             const SizedBox(height: 24),
@@ -86,19 +107,21 @@ class DriverWalletScreen extends ConsumerWidget {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  'Transactions',
-                  style: Theme.of(context).textTheme.titleMedium,
+                  'İşlem geçmişi',
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
                 ),
               ],
             ),
             const SizedBox(height: 8),
-            bookingsAsync.when(
-              data: (bookings) => bookings.isEmpty
+            transactionsAsync.when(
+              data: (txns) => txns.isEmpty
                   ? Padding(
                       padding: const EdgeInsets.all(24),
                       child: Center(
                         child: Text(
-                          'No completed jobs in this period',
+                          'Henüz işlem yok',
                           style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                                 color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
                               ),
@@ -108,12 +131,9 @@ class DriverWalletScreen extends ConsumerWidget {
                   : ListView.separated(
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
-                      itemCount: bookings.length,
+                      itemCount: txns.length,
                       separatorBuilder: (_, __) => const Divider(height: 1),
-                      itemBuilder: (context, i) {
-                        final b = bookings[i];
-                        return _TransactionTile(booking: b);
-                      },
+                      itemBuilder: (context, i) => _WalletTransactionTile(transaction: txns[i]),
                     ),
               loading: () => const Padding(
                 padding: EdgeInsets.all(24),
@@ -121,7 +141,7 @@ class DriverWalletScreen extends ConsumerWidget {
               ),
               error: (e, _) => Padding(
                 padding: const EdgeInsets.all(24),
-                child: Text('Error: $e', style: TextStyle(color: Theme.of(context).colorScheme.error)),
+                child: Text('Hata: $e', style: TextStyle(color: Theme.of(context).colorScheme.error)),
               ),
             ),
           ],
@@ -131,75 +151,272 @@ class DriverWalletScreen extends ConsumerWidget {
   }
 }
 
-class _EarningsCard extends StatelessWidget {
-  const _EarningsCard({
-    required this.title,
-    required this.asyncValue,
-  });
+class _BalanceCard extends StatelessWidget {
+  const _BalanceCard({this.wallet});
 
-  final String title;
-  final AsyncValue<double> asyncValue;
+  final Wallet? wallet;
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      elevation: 2,
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              title,
-              style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                    color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7),
-                  ),
-            ),
-            const SizedBox(height: 8),
-            asyncValue.when(
-              data: (value) => Text(
-                '${value.toStringAsFixed(0)} ${AppConstants.currencySymbol}',
-                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      color: Theme.of(context).colorScheme.primary,
-                    ),
-              ),
-              loading: () => const SizedBox(
-                height: 32,
-                child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
-              ),
-              error: (_, __) => Text(
-                '—',
-                style: Theme.of(context).textTheme.headlineSmall,
-              ),
-            ),
+    final balance = wallet?.availableBalance ?? 0.0;
+    final totalEarned = wallet?.totalEarned ?? 0.0;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Theme.of(context).colorScheme.primaryContainer,
+            Theme.of(context).colorScheme.tertiaryContainer.withValues(alpha: 0.6),
           ],
         ),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.2),
+            blurRadius: 12,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'withdrawable_balance'.tr(),
+            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  color: Theme.of(context).colorScheme.onPrimaryContainer.withValues(alpha: 0.8),
+                ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            '${balance.toStringAsFixed(2)} ${AppConstants.currencySymbol}',
+            style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                  fontWeight: FontWeight.bold,
+                  color: Theme.of(context).colorScheme.onPrimaryContainer,
+                ),
+          ),
+          const SizedBox(height: 16),
+          Text(
+            '${'total_earned_label'.tr()}: ${totalEarned.toStringAsFixed(0)} ${AppConstants.currencySymbol}',
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: Theme.of(context).colorScheme.onPrimaryContainer.withValues(alpha: 0.7),
+                ),
+          ),
+        ],
       ),
     );
   }
 }
 
-class _WeeklyBarChart extends StatelessWidget {
-  const _WeeklyBarChart({required this.values});
-
-  final List<double> values;
-
-  static const _weekdayLabels = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+class _BalanceCardShimmer extends StatelessWidget {
+  const _BalanceCardShimmer();
 
   @override
   Widget build(BuildContext context) {
-    final maxY = values.isEmpty ? 1.0 : values.reduce((a, b) => a > b ? a : b);
-    final top = maxY <= 0 ? 1.0 : maxY * 1.2;
+    return Container(
+      height: 140,
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: const Center(child: CircularProgressIndicator()),
+    );
+  }
+}
+
+class _WithdrawButton extends ConsumerStatefulWidget {
+  const _WithdrawButton({this.wallet});
+
+  final Wallet? wallet;
+
+  @override
+  ConsumerState<_WithdrawButton> createState() => _WithdrawButtonState();
+}
+
+class _WithdrawButtonState extends ConsumerState<_WithdrawButton> {
+  bool _loading = false;
+
+  Future<void> _showWithdrawDialog() async {
+    if (widget.wallet == null) return;
+    final balance = widget.wallet!.availableBalance;
+    if (balance <= 0) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('insufficient_balance'.tr())),
+        );
+      }
+      return;
+    }
+
+    final amount = await showDialog<double>(
+      context: context,
+      builder: (context) => _WithdrawAmountDialog(maxAmount: balance),
+    );
+    if (amount == null || amount <= 0 || !mounted) return;
+
+    setState(() => _loading = true);
+    try {
+      final driverId = ref.read(driverIdProvider);
+      if (driverId == null) throw Exception('Oturum yok');
+      final client = ref.read(supabaseClientProvider);
+      final res = await requestWithdrawal(driverId: driverId, amount: amount, client: client);
+      if (mounted) {
+        ref.invalidate(driverWalletProvider);
+        ref.invalidate(driverTransactionsProvider);
+        final ok = res['ok'] as bool? ?? false;
+        if (ok) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('withdrawal_request_received'.tr()),
+              backgroundColor: Colors.green,
+            ),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(res['error'] as String? ?? 'transaction_failed'.tr())),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Hata: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final balance = widget.wallet?.availableBalance ?? 0.0;
+
+    return FilledButton.icon(
+      onPressed: (_loading || balance <= 0) ? null : _showWithdrawDialog,
+      icon: _loading
+          ? const SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+            )
+          : const Icon(Icons.account_balance_wallet),
+      label: Text('withdraw'.tr()),
+      style: FilledButton.styleFrom(
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        backgroundColor: Theme.of(context).colorScheme.primary,
+      ),
+    );
+  }
+}
+
+class _WithdrawAmountDialog extends StatefulWidget {
+  const _WithdrawAmountDialog({required this.maxAmount});
+
+  final double maxAmount;
+
+  @override
+  State<_WithdrawAmountDialog> createState() => _WithdrawAmountDialogState();
+}
+
+class _WithdrawAmountDialogState extends State<_WithdrawAmountDialog> {
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.maxAmount.toStringAsFixed(0));
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text('withdrawal_request'.tr()),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            '${'max_label'.tr()}: ${widget.maxAmount.toStringAsFixed(0)} ${AppConstants.currencySymbol}',
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _controller,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            decoration: const InputDecoration(
+              labelText: 'amount_label'.tr(),
+              suffixText: AppConstants.currencySymbol,
+              border: OutlineInputBorder(),
+            ),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: Text('cancel'.tr()),
+        ),
+        FilledButton(
+          onPressed: () {
+            final v = double.tryParse(_controller.text.replaceAll(',', '.')) ?? 0;
+            if (v > 0 && v <= widget.maxAmount) {
+              Navigator.of(context).pop(v);
+            }
+          },
+          child: Text('request_withdraw'.tr()),
+        ),
+      ],
+    );
+  }
+}
+
+/// Line chart: last 7 days earnings from transactions (credits per day).
+class _EarningsLineChart extends StatelessWidget {
+  const _EarningsLineChart({required this.transactions});
+
+  final List<WalletTransaction> transactions;
+
+  @override
+  Widget build(BuildContext context) {
     final now = DateTime.now();
     final todayStart = DateTime(now.year, now.month, now.day);
+    final dailySums = List<double>.filled(7, 0);
+    for (var i = 0; i < 7; i++) {
+      final dayStart = todayStart.subtract(Duration(days: 6 - i));
+      final dayEnd = dayStart.add(const Duration(days: 1));
+      for (final t in transactions) {
+        if (t.createdAt == null || t.amount <= 0) continue;
+        final d = t.createdAt!.isUtc ? t.createdAt!.toLocal() : t.createdAt!;
+        if (d.isAfter(dayStart.subtract(const Duration(seconds: 1))) && d.isBefore(dayEnd)) {
+          dailySums[i] += t.amount;
+        }
+      }
+    }
 
-    return BarChart(
-      BarChartData(
-        alignment: BarChartAlignment.spaceAround,
+    final maxY = dailySums.isEmpty ? 1.0 : dailySums.reduce((a, b) => a > b ? a : b);
+    final top = maxY <= 0 ? 1.0 : maxY * 1.2;
+    final spots = [
+      for (var i = 0; i < 7; i++) FlSpot(i.toDouble(), dailySums[i]),
+    ];
+
+    return LineChart(
+      LineChartData(
+        minX: 0,
+        maxX: 6,
+        minY: 0,
         maxY: top,
-        barTouchData: BarTouchData(enabled: false),
+        gridData: FlGridData(show: true, drawVerticalLine: false),
         titlesData: FlTitlesData(
           show: true,
           bottomTitles: AxisTitles(
@@ -207,13 +424,12 @@ class _WeeklyBarChart extends StatelessWidget {
               showTitles: true,
               getTitlesWidget: (value, meta) {
                 final i = value.toInt();
-                if (i >= 0 && i < values.length) {
+                if (i >= 0 && i < 7) {
                   final day = todayStart.subtract(Duration(days: 6 - i));
-                  final label = _weekdayLabels[day.weekday - 1];
                   return Padding(
                     padding: const EdgeInsets.only(top: 8),
                     child: Text(
-                      '$label ${day.day}',
+                      '${day.day}/${day.month}',
                       style: Theme.of(context).textTheme.labelSmall,
                     ),
                   );
@@ -240,22 +456,20 @@ class _WeeklyBarChart extends StatelessWidget {
           topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
           rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
         ),
-        gridData: FlGridData(show: true, drawVerticalLine: false),
         borderData: FlBorderData(show: false),
-        barGroups: [
-          for (var i = 0; i < values.length; i++)
-            BarChartGroupData(
-              x: i,
-              barRods: [
-                BarChartRodData(
-                  toY: values[i],
-                  width: 16,
-                  color: Theme.of(context).colorScheme.primary,
-                  borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
-                ),
-              ],
-              showingTooltipIndicators: [],
+        lineBarsData: [
+          LineChartBarData(
+            spots: spots,
+            isCurved: true,
+            color: Colors.green.shade700,
+            barWidth: 3,
+            isStrokeCapRound: true,
+            dotData: const FlDotData(show: true),
+            belowBarData: BarAreaData(
+              show: true,
+              color: Colors.green.withValues(alpha: 0.15),
             ),
+          ),
         ],
       ),
       duration: const Duration(milliseconds: 300),
@@ -263,46 +477,72 @@ class _WeeklyBarChart extends StatelessWidget {
   }
 }
 
-String _formatDate(DateTime d) {
-  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-  final m = d.month >= 1 && d.month <= 12 ? months[d.month - 1] : '';
-  final h = d.hour.toString().padLeft(2, '0');
-  final min = d.minute.toString().padLeft(2, '0');
-  return '${d.day} $m, $h:$min';
+String _formatTxnDate(DateTime? d) {
+  if (d == null) return '—';
+  final local = d.isUtc ? d.toLocal() : d;
+  const months = ['Oca', 'Şub', 'Mar', 'Nis', 'May', 'Haz', 'Tem', 'Ağu', 'Eyl', 'Eki', 'Kas', 'Ara'];
+  final m = local.month >= 1 && local.month <= 12 ? months[local.month - 1] : '';
+  return '${local.day} $m, ${local.hour.toString().padLeft(2, '0')}:${local.minute.toString().padLeft(2, '0')}';
 }
 
-class _TransactionTile extends StatelessWidget {
-  const _TransactionTile({required this.booking});
+String _transactionTitle(WalletTransaction t) {
+  switch (t.type) {
+    case 'booking_credit':
+      return t.description ?? 'İş tamamlandı';
+    case 'withdrawal':
+      return t.status == 'pending_admin_approval'
+          ? 'Çekim talebi (onay bekliyor)'
+          : t.description ?? 'Para çekme';
+    case 'withdrawal_fee':
+      return 'Ücret';
+    case 'adjustment':
+      return t.description ?? 'Düzeltme';
+    default:
+      return t.description ?? t.type;
+  }
+}
 
-  final Booking booking;
+class _WalletTransactionTile extends StatelessWidget {
+  const _WalletTransactionTile({required this.transaction});
+
+  final WalletTransaction transaction;
 
   @override
   Widget build(BuildContext context) {
-    final date = booking.endedAt ?? booking.createdAt;
-    final dateStr = date != null
-        ? _formatDate(date.isUtc ? date.toLocal() : date)
-        : '—';
-    final net = netPayout(booking);
+    final isCredit = transaction.isCredit;
+    final amountColor = isCredit ? Colors.green.shade700 : Colors.red.shade700;
+    final amountStr = '${transaction.amount.abs().toStringAsFixed(0)} ${AppConstants.currencySymbol}';
+    if (!isCredit) {
+      // Show negative with minus or just the absolute value with red
+    }
 
     return ListTile(
-      contentPadding: const EdgeInsets.symmetric(vertical: 4, horizontal: 0),
+      contentPadding: const EdgeInsets.symmetric(vertical: 6, horizontal: 0),
+      leading: CircleAvatar(
+        backgroundColor: isCredit
+            ? Colors.green.withValues(alpha: 0.2)
+            : Colors.red.withValues(alpha: 0.2),
+        child: Icon(
+          isCredit ? Icons.add : Icons.remove,
+          color: amountColor,
+          size: 22,
+        ),
+      ),
       title: Text(
-        booking.pickupAddress,
-        maxLines: 2,
-        overflow: TextOverflow.ellipsis,
+        _transactionTitle(transaction),
         style: Theme.of(context).textTheme.bodyMedium,
       ),
       subtitle: Text(
-        dateStr,
+        _formatTxnDate(transaction.createdAt),
         style: Theme.of(context).textTheme.bodySmall?.copyWith(
               color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
             ),
       ),
       trailing: Text(
-        '${net.toStringAsFixed(0)} ${AppConstants.currencySymbol}',
+        '${isCredit ? '+' : '-'}$amountStr',
         style: Theme.of(context).textTheme.titleMedium?.copyWith(
               fontWeight: FontWeight.w600,
-              color: Colors.green.shade700,
+              color: amountColor,
             ),
       ),
     );

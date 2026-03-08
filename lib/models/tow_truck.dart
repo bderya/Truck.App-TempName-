@@ -26,6 +26,8 @@ class TowTruck {
     this.isInspected = true,
     this.lastInspectionAt,
     this.inspectionPhotoUrls,
+    this.currentHeading,
+    this.currentSpeedKmh,
     this.createdAt,
     this.updatedAt,
   });
@@ -47,6 +49,10 @@ class TowTruck {
   final bool isInspected;
   final DateTime? lastInspectionAt;
   final List<String>? inspectionPhotoUrls;
+  /// Direction of travel in degrees (0–360). From background geolocation.
+  final double? currentHeading;
+  /// Speed in km/h. From background geolocation.
+  final double? currentSpeedKmh;
   final DateTime? createdAt;
   final DateTime? updatedAt;
 
@@ -70,6 +76,8 @@ class TowTruck {
             ? DateTime.parse(json['last_inspection_at'] as String)
             : null,
         inspectionPhotoUrls: _parseStringList(json['inspection_photo_urls']),
+        currentHeading: (json['current_heading'] as num?)?.toDouble(),
+        currentSpeedKmh: (json['current_speed_kmh'] as num?)?.toDouble(),
         createdAt: json['created_at'] != null
             ? DateTime.parse(json['created_at'] as String)
             : null,
@@ -96,6 +104,8 @@ class TowTruck {
         'is_inspected': isInspected,
         if (lastInspectionAt != null) 'last_inspection_at': lastInspectionAt!.toIso8601String(),
         if (inspectionPhotoUrls != null) 'inspection_photo_urls': inspectionPhotoUrls,
+        if (currentHeading != null) 'current_heading': currentHeading,
+        if (currentSpeedKmh != null) 'current_speed_kmh': currentSpeedKmh,
         if (createdAt != null) 'created_at': createdAt!.toIso8601String(),
         if (updatedAt != null) 'updated_at': updatedAt!.toIso8601String(),
       };
@@ -128,6 +138,8 @@ class TowTruck {
     bool? isInspected,
     DateTime? lastInspectionAt,
     List<String>? inspectionPhotoUrls,
+    double? currentHeading,
+    double? currentSpeedKmh,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) =>
@@ -149,6 +161,8 @@ class TowTruck {
         isInspected: isInspected ?? this.isInspected,
         lastInspectionAt: lastInspectionAt ?? this.lastInspectionAt,
         inspectionPhotoUrls: inspectionPhotoUrls ?? this.inspectionPhotoUrls,
+        currentHeading: currentHeading ?? this.currentHeading,
+        currentSpeedKmh: currentSpeedKmh ?? this.currentSpeedKmh,
         createdAt: createdAt ?? this.createdAt,
         updatedAt: updatedAt ?? this.updatedAt,
       );

@@ -18,6 +18,10 @@ class User {
     this.legalEntityTaxId,
     this.averageRating,
     this.isUnderReview = false,
+    this.isActive = true,
+    this.suspendedUntil,
+    this.consentVersion,
+    this.consentDate,
     this.createdAt,
     this.updatedAt,
   });
@@ -41,6 +45,14 @@ class User {
   final double? averageRating;
   /// Driver: true when average_rating < 3.5; hidden from map and dispatch.
   final bool isUnderReview;
+  /// Driver: false when suspended (e.g. 3 cancels in 7 days).
+  final bool isActive;
+  /// When suspension ends (48h after 3rd cancel).
+  final DateTime? suspendedUntil;
+  /// Version of accepted terms (e.g. v1.0).
+  final String? consentVersion;
+  /// When the user accepted the terms.
+  final DateTime? consentDate;
   final DateTime? createdAt;
   final DateTime? updatedAt;
 
@@ -62,6 +74,10 @@ class User {
         legalEntityTaxId: json['legal_entity_tax_id'] as String?,
         averageRating: (json['average_rating'] as num?)?.toDouble(),
         isUnderReview: json['is_under_review'] as bool? ?? false,
+        isActive: json['is_active'] as bool? ?? true,
+        suspendedUntil: json['suspended_until'] != null ? DateTime.parse(json['suspended_until'] as String) : null,
+        consentVersion: json['consent_version'] as String?,
+        consentDate: json['consent_date'] != null ? DateTime.parse(json['consent_date'] as String) : null,
         createdAt: json['created_at'] != null
             ? DateTime.parse(json['created_at'] as String)
             : null,
@@ -88,6 +104,10 @@ class User {
         if (legalEntityTaxId != null) 'legal_entity_tax_id': legalEntityTaxId,
         if (averageRating != null) 'average_rating': averageRating,
         'is_under_review': isUnderReview,
+        'is_active': isActive,
+        if (suspendedUntil != null) 'suspended_until': suspendedUntil!.toIso8601String(),
+        if (consentVersion != null) 'consent_version': consentVersion,
+        if (consentDate != null) 'consent_date': consentDate!.toIso8601String(),
         if (createdAt != null) 'created_at': createdAt!.toIso8601String(),
         if (updatedAt != null) 'updated_at': updatedAt!.toIso8601String(),
       };
@@ -110,6 +130,10 @@ class User {
     String? legalEntityTaxId,
     double? averageRating,
     bool? isUnderReview,
+    bool? isActive,
+    DateTime? suspendedUntil,
+    String? consentVersion,
+    DateTime? consentDate,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) =>
@@ -131,6 +155,10 @@ class User {
         legalEntityTaxId: legalEntityTaxId ?? this.legalEntityTaxId,
         averageRating: averageRating ?? this.averageRating,
         isUnderReview: isUnderReview ?? this.isUnderReview,
+        isActive: isActive ?? this.isActive,
+        suspendedUntil: suspendedUntil ?? this.suspendedUntil,
+        consentVersion: consentVersion ?? this.consentVersion,
+        consentDate: consentDate ?? this.consentDate,
         createdAt: createdAt ?? this.createdAt,
         updatedAt: updatedAt ?? this.updatedAt,
       );

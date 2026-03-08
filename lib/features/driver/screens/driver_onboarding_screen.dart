@@ -6,8 +6,10 @@ import 'package:image_picker/image_picker.dart';
 import 'package:path/path.dart' as p;
 import 'package:shared_preferences/shared_preferences.dart';
 
+import '../../../core/constants.dart' show consentVersion;
 import '../../../core/providers.dart';
 import '../../auth/providers/auth_state_provider.dart';
+import '../../legal/legal_document_screen.dart';
 import '../providers/driver_booking_provider.dart';
 import '../providers/driver_onboarding_provider.dart';
 import 'registration_received_screen.dart';
@@ -41,6 +43,8 @@ class _DriverOnboardingScreenState extends ConsumerState<DriverOnboardingScreen>
   File? _vehicleRegFile;
   bool _loading = false;
   String? _error;
+  bool _agreedKvkk = false;
+  bool _agreedEula = false;
 
   static const List<String> _towTruckStyles = ['sliding_bed', 'fixed', 'crane'];
   static const Map<String, String> _towTruckLabels = {
@@ -48,7 +52,7 @@ class _DriverOnboardingScreenState extends ConsumerState<DriverOnboardingScreen>
     'fixed': 'Fixed',
     'crane': 'Crane',
   };
-  static const int _maxSteps = 6;
+  static const int _maxSteps = 7;
 
   @override
   void initState() {
@@ -160,6 +164,8 @@ class _DriverOnboardingScreenState extends ConsumerState<DriverOnboardingScreen>
             iban: _ibanController.text.trim().isEmpty ? null : _ibanController.text.trim(),
             legalEntityTaxId: _taxIdController.text.trim().isEmpty ? null : _taxIdController.text.trim(),
           );
+      final now = DateTime.now().toUtc();
+      await ref.read(authServiceProvider).updateUserConsent(user.id, version: consentVersion, date: now);
       await _clearSavedStep();
       if (!mounted) return;
       ref.invalidate(currentAuthUserTowTruckProvider);
@@ -217,6 +223,12 @@ class _DriverOnboardingScreenState extends ConsumerState<DriverOnboardingScreen>
         return;
       }
     }
+    if (_currentStep == 5) {
+      if (!_agreedKvkk || !_agreedEula) {
+        setState(() => _error = 'Devam etmek için her iki sözleşmeyi de kabul etmelisiniz.');
+        return;
+      }
+    }
 
     if (_currentStep < _maxSteps - 1) {
       setState(() {
@@ -261,7 +273,9 @@ class _DriverOnboardingScreenState extends ConsumerState<DriverOnboardingScreen>
                 child: Row(
                   children: [
                     FilledButton(
-                      onPressed: _loading ? null : _onStepContinue,
+                      onPressed: (_loading || (_currentStep == 5 && (!_agreedKvkk || !_agreedEula)))
+                          ? null
+                          : _onStepContinue,
                       child: _loading
                           ? const SizedBox(
                               height: 20,
@@ -415,10 +429,62 @@ class _DriverOnboardingScreenState extends ConsumerState<DriverOnboardingScreen>
                   ],
                 ),
               ),
-              // Step 5: Submit
+              // Step 5: Legal consent
+              Step(
+                title: const Text('Yasal onay'),
+                isActive: _currentStep >= 5,
+                state: _currentStep > 5 ? StepState.complete : StepState.indexed,
+                content: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text('Kayıt olmak için aşağıdaki metinleri okuyup kabul etmelisiniz.'),
+                    const SizedBox(height: 16),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Checkbox(
+                          value: _agreedKvkk,
+                          onChanged: (v) => setState(() => _agreedKvkk = v ?? false),
+                          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () => LegalDocumentScreen.open(context, assetPath: 'assets/legal/kvkk.html', title: 'Gizlilik Politikası'),
+                            child: const Padding(
+                              padding: EdgeInsets.only(top: 12),
+                              child: Text('Gizlilik Politikası (KVKK)', style: TextStyle(decoration: TextDecoration.underline)),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Checkbox(
+                          value: _agreedEula,
+                          onChanged: (v) => setState(() => _agreedEula = v ?? false),
+                          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () => LegalDocumentScreen.open(context, assetPath: 'assets/legal/eula.html', title: 'Kullanım Koşulları'),
+                            child: const Padding(
+                              padding: EdgeInsets.only(top: 12),
+                              child: Text('Kullanım Koşulları (EULA)', style: TextStyle(decoration: TextDecoration.underline)),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              // Step 6: Submit
               Step(
                 title: const Text('Gönder'),
-                isActive: _currentStep >= 5,
+                isActive: _currentStep >= 6,
                 state: StepState.indexed,
                 content: const Text('Tüm bilgileri kontrol edip gönderin.'),
               ),

@@ -28,6 +28,8 @@ class DriverBookingNotifier extends StateNotifier<PendingJobRequest?> {
     this.openToIntercity = false,
     this.isInspected = true,
     this.isUnderReview = false,
+    this.isActive = true,
+    this.isAvailable = true,
     this.tierCategory,
   }) : super(null) {
     if (driverId != null && driverTruckType != null) {
@@ -45,6 +47,10 @@ class DriverBookingNotifier extends StateNotifier<PendingJobRequest?> {
   final bool isInspected;
   /// When true, driver is in review (rating < 3.5) and hidden from jobs.
   final bool isUnderReview;
+  /// When false, driver is suspended (e.g. 3 cancels in 7 days).
+  final bool isActive;
+  /// When false, driver is offline (shift toggle); do not show job requests.
+  final bool isAvailable;
   /// Gold, Silver, Bronze. High-value jobs only go to Gold.
   final String? tierCategory;
 
@@ -52,13 +58,30 @@ class DriverBookingNotifier extends StateNotifier<PendingJobRequest?> {
 
   void _subscribe() {
     final id = driverId!;
-    _channel = supabase.channel('driver-bookings-$id').onPostgresChanges(
-          schema: 'public',
-          table: 'bookings',
-          event: PostgresChangeEvent.insert,
-          callback: _onBookingInsert,
-        );
+    _channel = supabase.channel('driver-bookings-$id')
+      .onPostgresChanges(
+        schema: 'public',
+        table: 'bookings',
+        event: PostgresChangeEvent.insert,
+        callback: _onBookingInsert,
+      )
+      .onPostgresChanges(
+        schema: 'public',
+        table: 'bookings',
+        event: PostgresChangeEvent.update,
+        callback: _onBookingUpdate,
+      );
     _channel?.subscribe();
+  }
+
+  /// Re-opened after driver cancel: status → pending, is_priority_rematch = true.
+  Future<void> _onBookingUpdate(PostgresChangePayload payload) async {
+    final record = payload.newRecord;
+    if (record == null) return;
+    final status = record['status'] as String?;
+    final isPriorityRematch = record['is_priority_rematch'] as bool? ?? false;
+    if (status != 'pending' || !isPriorityRematch) return;
+    await _onBookingInsert(payload);
   }
 
   Future<void> _onBookingInsert(PostgresChangePayload payload) async {
@@ -68,7 +91,7 @@ class DriverBookingNotifier extends StateNotifier<PendingJobRequest?> {
     final status = record['status'] as String?;
     if (status != 'pending') return;
 
-    if (!isInspected || isUnderReview) return;
+    if (!isInspected || isUnderReview || !isActive || !isAvailable) return;
 
     final vehicleValueTier = record['vehicle_value_tier'] as String?;
     if (vehicleValueTier == 'high' && tierCategory != 'Gold') return;
@@ -113,6 +136,7 @@ class DriverBookingNotifier extends StateNotifier<PendingJobRequest?> {
         params: {
           'p_booking_id': current.booking.id,
           'p_driver_id': id,
+          'p_estimated_arrival_minutes': 15,
         },
       );
       state = null;
@@ -203,6 +227,8 @@ final driverBookingProvider =
     openToIntercity: truck?.openToIntercity ?? false,
     isInspected: truck?.isInspected ?? true,
     isUnderReview: user?.isUnderReview ?? false,
+    isActive: user?.isActive ?? true,
+    isAvailable: truck?.isAvailable ?? true,
     tierCategory: truck?.tierCategory,
   );
 });

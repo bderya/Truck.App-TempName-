@@ -1,28 +1,59 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:sentry_flutter/sentry_flutter.dart';
 
+import 'core/bg_registrar_stub.dart' if (dart.library.io) 'core/bg_registrar_io.dart' as bg_registrar;
+import 'core/crash_reporting_service.dart';
+import 'core/locale_helper.dart';
 import 'core/offline_banner.dart';
 import 'core/providers.dart';
+import 'core/supabase_http_client.dart';
 import 'core/supabase_service.dart';
 import 'admin_app.dart';
 import 'features/admin/admin_approval_screen.dart';
 import 'features/auth/providers/auth_state_provider.dart';
 import 'features/auth/screens/auth_gate.dart';
 import 'features/driver/driver_home_screen.dart';
+import 'features/legal/legal_document_screen.dart';
 import 'features/map/map_view_screen.dart';
 import 'services/push_notification_service.dart';
 
 /// Set to your Sentry DSN to enable crash reporting. Empty = disabled.
 const String _sentryDsn = '';
+/// Set true to enable Firebase Crashlytics (requires Firebase configured).
+const bool _enableCrashlytics = true;
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await EasyLocalization.ensureInitialized();
+
+  final startLocale = await LocaleHelper.getStartLocale();
+
+  await CrashReportingService.initialize(
+    sentryDsn: _sentryDsn,
+    enableCrashlytics: _enableCrashlytics,
+  );
 
   await SupabaseService.initialize(
     url: 'YOUR_SUPABASE_URL',
     anonKey: 'YOUR_SUPABASE_ANON_KEY',
+    httpClient: SupabaseHttpClient(),
+  );
+
+  if (!kIsWeb) {
+    bg_registrar.registerBackgroundGeolocationHeadless();
+  }
+
+  final app = EasyLocalization(
+    supportedLocales: const [Locale('tr', 'TR'), Locale('en', 'US')],
+    path: 'assets/translations',
+    startLocale: startLocale,
+    fallbackLocale: const Locale('en', 'US'),
+    child: const ProviderScope(
+      child: _AppRoot(),
+    ),
   );
 
   if (_sentryDsn.isNotEmpty) {
@@ -31,19 +62,25 @@ void main() async {
         options.dsn = _sentryDsn;
         options.tracesSampleRate = 0.2;
         options.environment = kReleaseMode ? 'production' : 'development';
+        options.beforeSend = CrashReportingService.beforeSend;
       },
-      appRunner: () => runApp(
-        const ProviderScope(
-          child: kIsWeb ? AdminApp() : _MobileApp(),
-        ),
-      ),
+      appRunner: () {
+        CrashReportingService.attachToExistingErrorHandlers();
+        runApp(app);
+      },
     );
   } else {
-    runApp(
-      const ProviderScope(
-        child: kIsWeb ? AdminApp() : _MobileApp(),
-      ),
-    );
+    runApp(app);
+  }
+}
+
+/// Root that picks Admin vs Mobile and provides locale to MaterialApp.
+class _AppRoot extends StatelessWidget {
+  const _AppRoot();
+
+  @override
+  Widget build(BuildContext context) {
+    return kIsWeb ? const AdminApp() : const _MobileApp();
   }
 }
 
@@ -54,7 +91,10 @@ class _MobileApp extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     return MaterialApp(
-      title: 'Cekici',
+      title: 'app_title'.tr(),
+      localizationsDelegates: context.localizationDelegates,
+      supportedLocales: context.supportedLocales,
+      locale: context.locale,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.orange),
         useMaterial3: true,
@@ -86,6 +126,7 @@ class _FcmRegistrationState extends ConsumerState<_FcmRegistration> {
   Future<void> _registerFcm() async {
     try {
       final user = await ref.read(currentAppUserProvider.future);
+      CrashReportingService.setUserId(user?.id.toString());
       if (user != null) await initPushNotifications(userId: user.id);
     } catch (_) {}
   }
@@ -106,7 +147,7 @@ class _AppSwitcher extends ConsumerWidget {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Text(
-              'Cekici',
+              'app_title'.tr(),
               style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                     fontWeight: FontWeight.bold,
                   ),
@@ -119,7 +160,7 @@ class _AppSwitcher extends ConsumerWidget {
                 ),
               ),
               icon: const Icon(Icons.person),
-              label: const Text('Customer App'),
+              label: Text('customer_app'.tr()),
               style: FilledButton.styleFrom(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 32,
@@ -135,7 +176,7 @@ class _AppSwitcher extends ConsumerWidget {
                 ),
               ),
               icon: const Icon(Icons.local_shipping),
-              label: const Text('Driver App'),
+              label: Text('driver_app'.tr()),
               style: FilledButton.styleFrom(
                 padding: const EdgeInsets.symmetric(
                   horizontal: 32,
@@ -151,16 +192,23 @@ class _AppSwitcher extends ConsumerWidget {
                 ),
               ),
               icon: const Icon(Icons.admin_panel_settings),
-              label: const Text('Admin – Approval'),
+              label: Text('admin_approval'.tr()),
+            ),
+            const SizedBox(height: 16),
+            TextButton.icon(
+              onPressed: () => LegalDocumentScreen.open(context, assetPath: 'assets/legal/kvkk.html', title: 'Gizlilik Politikası'),
+              icon: const Icon(Icons.privacy_tip_outlined, size: 18),
+              label: const Text('Gizlilik Politikası'),
             ),
             const SizedBox(height: 32),
             TextButton.icon(
               onPressed: () async {
+                CrashReportingService.setUserId(null);
                 await ref.read(authServiceProvider).signOut();
                 ref.invalidate(authStatusProvider);
               },
               icon: const Icon(Icons.logout),
-              label: const Text('Sign out'),
+              label: Text('sign_out'.tr()),
             ),
           ],
         ),

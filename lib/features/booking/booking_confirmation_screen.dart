@@ -49,6 +49,8 @@ class _BookingConfirmationScreenState extends ConsumerState<BookingConfirmationS
   bool _isAuthorizing = false;
   /// For intercity: desired pickup date/time (null = ASAP).
   DateTime? _desiredPickupAt;
+  /// Estimated value tier of client vehicle. High = only Gold drivers notified.
+  String _vehicleValueTier = 'medium';
 
   String get _vehicleType => _vehicleOptions[_selectedIndex].$2;
   bool get _isIntercity => _distanceKm >= AppConstants.intercityDistanceThresholdKm;
@@ -168,6 +170,7 @@ class _BookingConfirmationScreenState extends ConsumerState<BookingConfirmationS
             'vehicle_type_requested': _vehicleType,
             'status': 'pending',
             'is_intercity': _isIntercity,
+            'vehicle_value_tier': _vehicleValueTier,
             if (_desiredPickupAt != null) 'desired_pickup_at': _desiredPickupAt!.toIso8601String(),
             if (_estimatedTolls != null) 'estimated_tolls': _estimatedTolls,
             if (paymentId != null && paymentId.isNotEmpty) 'payment_id': paymentId,
@@ -462,6 +465,30 @@ class _BookingConfirmationScreenState extends ConsumerState<BookingConfirmationS
                         ),
                       );
                     }),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'Vehicle value (for driver matching)',
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.8),
+                        ),
+                  ),
+                  const SizedBox(height: 6),
+                  Row(
+                    children: ['low', 'medium', 'high'].map((tier) {
+                      final selected = _vehicleValueTier == tier;
+                      final label = tier == 'low' ? 'Standard' : tier == 'medium' ? 'Premium' : 'Luxury';
+                      return Expanded(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 4),
+                          child: FilterChip(
+                            label: Text(label),
+                            selected: selected,
+                            onSelected: (_) => setState(() => _vehicleValueTier = tier),
+                          ),
+                        ),
+                      );
+                    }).toList(),
                   ),
                   const SizedBox(height: 20),
                   Text(

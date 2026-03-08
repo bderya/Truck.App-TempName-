@@ -1,10 +1,13 @@
 import 'dart:async';
+import 'dart:math' as math;
 
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/crash_reporting_service.dart';
 import '../../core/providers.dart';
 import '../../models/models.dart';
 import '../../services/eta_service.dart';
@@ -39,6 +42,7 @@ class _DriverTrackingScreenState extends ConsumerState<DriverTrackingScreen> {
   @override
   void initState() {
     super.initState();
+    CrashReportingService.setBookingId(widget.booking.id.toString());
     _trackingService = ref.read(driverTrackingServiceProvider);
     _subscribe();
     _subscribeToBooking();
@@ -54,12 +58,29 @@ class _DriverTrackingScreenState extends ConsumerState<DriverTrackingScreen> {
   void _subscribeToBooking() {
     _bookingSubscription = _trackingService.watchBookingById(widget.booking.id).listen((booking) {
       if (!mounted || booking == null || _reviewShown) return;
+      if (booking.status == 'pending' && booking.isPriorityRematch) {
+        Navigator.of(context).pop(booking);
+        return;
+      }
       if (booking.status == 'completed') {
         _reviewShown = true;
+        final completedBooking = booking;
         ReviewPopup.show(
           context,
-          onSubmit: (_) => _openReceipt(booking.id),
-          onDismiss: () => _openReceipt(booking.id),
+          driverName: null,
+          onSubmit: (rating) async {
+            if (rating > 0 && completedBooking.driverId != null) {
+              try {
+                await ref.read(supabaseClientProvider).from('driver_ratings').insert({
+                  'booking_id': completedBooking.id,
+                  'driver_id': completedBooking.driverId,
+                  'score': rating,
+                });
+              } catch (_) {}
+            }
+            if (mounted) _openReceipt(completedBooking.id);
+          },
+          onDismiss: () => _openReceipt(completedBooking.id),
         );
       }
     });
@@ -76,6 +97,7 @@ class _DriverTrackingScreenState extends ConsumerState<DriverTrackingScreen> {
 
   @override
   void dispose() {
+    CrashReportingService.setBookingId(null);
     _subscription?.cancel();
     _bookingSubscription?.cancel();
     _trackingService.dispose();
@@ -86,14 +108,14 @@ class _DriverTrackingScreenState extends ConsumerState<DriverTrackingScreen> {
   Widget build(BuildContext context) {
     if (_towTruck == null) {
       return Scaffold(
-        appBar: AppBar(title: const Text('Driver on the way')),
-        body: const Center(
+        appBar: AppBar(title: Text('driver_on_the_way'.tr())),
+        body: Center(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              CircularProgressIndicator(),
-              SizedBox(height: 16),
-              Text('Waiting for driver position...'),
+              const CircularProgressIndicator(),
+              const SizedBox(height: 16),
+              Text('waiting_driver_position'.tr()),
             ],
           ),
         ),
@@ -102,7 +124,7 @@ class _DriverTrackingScreenState extends ConsumerState<DriverTrackingScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Driver on the way'),
+        title: Text('driver_on_the_way'.tr()),
         actions: [
           IconButton(
             icon: const Icon(Icons.chat_bubble_outline),
@@ -147,26 +169,74 @@ class _TrackingMap extends StatefulWidget {
   State<_TrackingMap> createState() => _TrackingMapState();
 }
 
-class _TrackingMapState extends State<_TrackingMap> with SingleTickerProviderStateMixin {
+/// Tween for smooth LatLng interpolation (required for Animation<LatLng>).
+class _LatLngTween extends Tween<LatLng> {
+  _LatLngTween({super.begin, super.end});
+
+  @override
+  LatLng lerp(double t) => LatLng(
+        begin!.latitude + t * (end!.latitude - begin!.latitude),
+        begin!.longitude + t * (end!.longitude - begin!.longitude),
+      );
+}
+
+/// Bearing in degrees (0 = North, 90 = East) from [from] to [to].
+double _bearingBetween(LatLng from, LatLng to) {
+  final dLon = (to.longitude - from.longitude) * math.pi / 180;
+  final lat1 = from.latitude * math.pi / 180;
+  final lat2 = to.latitude * math.pi / 180;
+  final x = math.cos(lat1) * math.sin(lat2) -
+      math.sin(lat1) * math.cos(lat2) * math.cos(dLon);
+  final y = math.sin(dLon) * math.cos(lat2);
+  var bearing = math.atan2(y, x) * 180 / math.pi;
+  if (bearing < 0) bearing += 360;
+  return bearing;
+}
+
+class _TrackingMapState extends State<_TrackingMap> with TickerProviderStateMixin {
   LatLng? _animFrom;
   LatLng? _animTo;
-  late AnimationController _animController;
-  late Animation<double> _anim;
+  late AnimationController _positionController;
+  late Animation<LatLng> _positionAnimation;
+  late Animation<double> _bearingAnimation;
+  double _lastBearingDeg = 0;
+  Timer? _staleCheckTimer;
+
+  static const Duration _driverMarkerAnimationDuration = Duration(seconds: 2);
+  static const Duration _signalLostThreshold = Duration(seconds: 45);
+  static const Duration _staleCheckInterval = Duration(seconds: 5);
 
   @override
   void initState() {
     super.initState();
-    _animController = AnimationController(
+    _positionController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1500),
+      duration: _driverMarkerAnimationDuration,
     );
-    _anim = CurvedAnimation(parent: _animController, curve: Curves.easeInOut);
+    final curved = CurvedAnimation(
+      parent: _positionController,
+      curve: Curves.easeInOut,
+    );
+    _positionAnimation = _LatLngTween(begin: LatLng(0, 0), end: LatLng(0, 0)).animate(curved);
+    _bearingAnimation = Tween<double>(begin: 0, end: 0).animate(curved);
+    _staleCheckTimer = Timer.periodic(_staleCheckInterval, (_) {
+      if (mounted) setState(() {});
+    });
   }
 
   @override
   void dispose() {
-    _animController.dispose();
+    _staleCheckTimer?.cancel();
+    _staleCheckTimer = null;
+    _positionController.dispose();
     super.dispose();
+  }
+
+  bool get _isDriverSignalStale {
+    final updatedAt = widget.truck.updatedAt;
+    if (updatedAt == null) return true;
+    final age = DateTime.now().difference(updatedAt.isUtc ? updatedAt.toLocal() : updatedAt);
+    return age > _signalLostThreshold;
   }
 
   @override
@@ -174,27 +244,35 @@ class _TrackingMapState extends State<_TrackingMap> with SingleTickerProviderSta
     super.didUpdateWidget(oldWidget);
     if (oldWidget.truck.currentLatitude != widget.truck.currentLatitude ||
         oldWidget.truck.currentLongitude != widget.truck.currentLongitude) {
-      _animFrom = LatLng(
+      final from = LatLng(
         oldWidget.truck.currentLatitude,
         oldWidget.truck.currentLongitude,
       );
-      _animTo = LatLng(
+      final to = LatLng(
         widget.truck.currentLatitude,
         widget.truck.currentLongitude,
       );
-      _animController.forward(from: 0);
+      _animFrom = from;
+      _animTo = to;
+      final bearingTo = _bearingBetween(from, to);
+      _positionAnimation = _LatLngTween(begin: from, end: to)
+          .animate(CurvedAnimation(parent: _positionController, curve: Curves.easeInOut));
+      _bearingAnimation = Tween<double>(begin: _lastBearingDeg, end: bearingTo)
+          .animate(CurvedAnimation(parent: _positionController, curve: Curves.easeInOut));
+      _lastBearingDeg = bearingTo;
+      _positionController.forward(from: 0);
     }
   }
 
   LatLng _driverDisplayPosition() {
     final current = LatLng(widget.truck.currentLatitude, widget.truck.currentLongitude);
-    if (_animTo == null) return current;
-    if (_animFrom == null) return _animTo!;
-    final t = _anim.value;
-    return LatLng(
-      _animFrom!.latitude + t * (_animTo!.latitude - _animFrom!.latitude),
-      _animFrom!.longitude + t * (_animTo!.longitude - _animFrom!.longitude),
-    );
+    if (_animTo == null || _animFrom == null) return current;
+    return _positionAnimation.value;
+  }
+
+  double _driverDisplayBearing() {
+    if (_animFrom == null || _animTo == null) return _lastBearingDeg;
+    return _bearingAnimation.value;
   }
 
   @override
@@ -215,11 +293,35 @@ class _TrackingMapState extends State<_TrackingMap> with SingleTickerProviderSta
 
     return Column(
       children: [
+        if (_isDriverSignalStale)
+          Material(
+            color: Colors.amber.shade700,
+            child: SafeArea(
+              bottom: false,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                child: Row(
+                  children: [
+                    Icon(Icons.signal_cellular_off, color: Colors.white, size: 22),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        'driver_signal_lost'.tr(),
+                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 13),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
         Expanded(
           child: AnimatedBuilder(
-            animation: _anim,
+            animation: _positionController,
             builder: (context, _) {
               final driverPos = _driverDisplayPosition();
+              final bearingDeg = _driverDisplayBearing();
+              final bearingRad = (bearingDeg - 90) * math.pi / 180;
               return FlutterMap(
                 options: MapOptions(
                   initialCenter: driverPos,
@@ -237,22 +339,25 @@ class _TrackingMapState extends State<_TrackingMap> with SingleTickerProviderSta
                         point: driverPos,
                         width: 48,
                         height: 48,
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: Colors.orange,
-                            shape: BoxShape.circle,
-                            border: Border.all(color: Colors.white, width: 3),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.3),
-                                blurRadius: 8,
-                              ),
-                            ],
-                          ),
-                          child: const Icon(
-                            Icons.local_shipping,
-                            color: Colors.white,
-                            size: 24,
+                        child: Transform.rotate(
+                          angle: bearingRad,
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: Colors.orange,
+                              shape: BoxShape.circle,
+                              border: Border.all(color: Colors.white, width: 3),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.3),
+                                  blurRadius: 8,
+                                ),
+                              ],
+                            ),
+                            child: const Icon(
+                              Icons.local_shipping,
+                              color: Colors.white,
+                              size: 24,
+                            ),
                           ),
                         ),
                       ),
@@ -285,14 +390,14 @@ class _TrackingMapState extends State<_TrackingMap> with SingleTickerProviderSta
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 Text(
-                  'ETA ${eta.inMinutes} min',
+                  'ETA ${eta.inMinutes} ${'eta_min'.tr()}',
                   style: Theme.of(context).textTheme.titleLarge?.copyWith(
                         fontWeight: FontWeight.bold,
                       ),
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  '${distanceKm.toStringAsFixed(1)} km to pickup',
+                  '${distanceKm.toStringAsFixed(1)} ${'km_to_pickup'.tr()}',
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                         color: Theme.of(context)
                             .colorScheme

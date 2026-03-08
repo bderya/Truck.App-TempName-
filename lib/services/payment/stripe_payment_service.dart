@@ -1,6 +1,7 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/constants.dart';
+import '../../core/crash_reporting_service.dart';
 import 'payment_types.dart';
 import 'payment_service.dart';
 
@@ -34,6 +35,11 @@ class StripePaymentService implements PaymentService {
       ) as Map<String, dynamic>?;
 
       if (res == null || res['ok'] != true) {
+        CrashReportingService.reportNonFatalApiError(
+          service: 'payment',
+          statusCode: 0,
+          sanitizedMessage: 'Add card failed',
+        );
         return PaymentFailure(
           res?['error'] as String? ?? 'Failed to add card',
           code: res?['code'] as String?,
@@ -49,6 +55,11 @@ class StripePaymentService implements PaymentService {
       );
       return PaymentSuccess(token);
     } catch (e) {
+      CrashReportingService.reportNonFatalApiError(
+        service: 'payment',
+        statusCode: 0,
+        sanitizedMessage: 'Add card error',
+      );
       return PaymentFailure(
         e.toString(),
         code: 'add_card_error',
@@ -79,6 +90,11 @@ class StripePaymentService implements PaymentService {
       final res = await _client.rpc(_rpcTokenizeAndSave, params: params) as Map<String, dynamic>?;
 
       if (res == null || res['ok'] != true) {
+        CrashReportingService.reportNonFatalApiError(
+          service: 'payment',
+          statusCode: 0,
+          sanitizedMessage: 'Tokenize card failed',
+        );
         return PaymentFailure(
           res?['error'] as String? ?? 'Failed to save card',
           code: res?['code'] as String?,
@@ -94,6 +110,11 @@ class StripePaymentService implements PaymentService {
       );
       return PaymentSuccess(token);
     } catch (e) {
+      CrashReportingService.reportNonFatalApiError(
+        service: 'payment',
+        statusCode: 0,
+        sanitizedMessage: 'Tokenize error',
+      );
       return PaymentFailure(
         e.toString(),
         code: 'tokenize_and_save_error',
@@ -120,6 +141,11 @@ class StripePaymentService implements PaymentService {
       ) as Map<String, dynamic>?;
 
       if (res == null || res['ok'] != true) {
+        CrashReportingService.reportNonFatalApiError(
+          service: 'payment',
+          statusCode: 0,
+          sanitizedMessage: 'Authorization failed',
+        );
         return PaymentFailure(
           res?['error'] as String? ?? 'Authorization failed',
           code: res?['code'] as String?,
@@ -131,6 +157,11 @@ class StripePaymentService implements PaymentService {
       }
       return PaymentSuccess(id);
     } catch (e) {
+      CrashReportingService.reportNonFatalApiError(
+        service: 'payment',
+        statusCode: 0,
+        sanitizedMessage: 'Authorize error',
+      );
       return PaymentFailure(
         e.toString(),
         code: 'authorize_error',
@@ -159,6 +190,11 @@ class StripePaymentService implements PaymentService {
       ) as Map<String, dynamic>?;
 
       if (res == null || res['ok'] != true) {
+        CrashReportingService.reportNonFatalApiError(
+          service: 'payment',
+          statusCode: 0,
+          sanitizedMessage: 'Process payment failed',
+        );
         return PaymentFailure(
           res?['error'] as String? ?? 'Payment failed',
           code: res?['code'] as String?,
@@ -167,6 +203,11 @@ class StripePaymentService implements PaymentService {
 
       return PaymentSuccess(res['payment_intent_id'] as String);
     } catch (e) {
+      CrashReportingService.reportNonFatalApiError(
+        service: 'payment',
+        statusCode: 0,
+        sanitizedMessage: 'Process payment error',
+      );
       return PaymentFailure(
         e.toString(),
         code: 'process_payment_error',
@@ -222,6 +263,11 @@ class StripePaymentService implements PaymentService {
       );
       return PaymentSuccess(breakdown);
     } catch (e) {
+      CrashReportingService.reportNonFatalApiError(
+        service: 'payment',
+        statusCode: 0,
+        sanitizedMessage: 'Distribute funds error',
+      );
       return PaymentFailure(
         e.toString(),
         code: 'distribute_funds_error',

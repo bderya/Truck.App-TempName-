@@ -1,3 +1,6 @@
+/// Legal consent version stored in DB when user accepts terms (e.g. v1.0).
+const String consentVersion = 'v1.0';
+
 /// App-wide constants
 class AppConstants {
   AppConstants._();

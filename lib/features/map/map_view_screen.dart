@@ -1,12 +1,12 @@
 import 'dart:async';
 
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-import '../../core/error_messages_tr.dart';
 import '../../core/providers.dart';
 import '../../models/models.dart';
 import '../booking/booking_confirmation_screen.dart';
@@ -150,7 +150,34 @@ class _MapViewScreenState extends ConsumerState<MapViewScreen> {
               clientLocation: _userLocation!,
             ),
           ),
-        );
+        ).then((returnedBooking) {
+          if (!mounted || returnedBooking is! Booking || returnedBooking.status != 'pending') return;
+          setState(() => _searchingBooking = returnedBooking);
+          _bookingSubscription?.cancel();
+          _bookingSubscription = _trackingService.watchBookingById(returnedBooking.id).listen((u) {
+            if (u?.driverId != null && mounted && _userLocation != null) {
+              _searchTimeoutTimer?.cancel();
+              _searchTimeoutTimer = null;
+              _bookingSubscription?.cancel();
+              _bookingSubscription = null;
+              setState(() => _searchingBooking = null);
+              Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => DriverTrackingScreen(
+                    booking: u!,
+                    clientLocation: _userLocation!,
+                  ),
+                ),
+              );
+            }
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('driver_cancelled_rematch'.tr()),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        });
       }
     });
   }
@@ -160,12 +187,12 @@ class _MapViewScreenState extends ConsumerState<MapViewScreen> {
       context: context,
       barrierDismissible: false,
       builder: (context) => AlertDialog(
-        title: const Text(ErrorMessagesTr.stillSearchingTitle),
-        content: const Text(ErrorMessagesTr.stillSearchingBody),
+        title: Text('still_searching_title'.tr()),
+        content: Text('still_searching_body'.tr()),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text(ErrorMessagesTr.keepWaiting),
+            child: Text('keep_waiting'.tr()),
           ),
           FilledButton(
             onPressed: () async {
@@ -173,7 +200,7 @@ class _MapViewScreenState extends ConsumerState<MapViewScreen> {
               final uri = Uri(scheme: 'tel', path: _supportPhone);
               if (await canLaunchUrl(uri)) await launchUrl(uri);
             },
-            child: const Text(ErrorMessagesTr.callSupport),
+            child: Text('call_support'.tr()),
           ),
         ],
       ),
@@ -184,7 +211,7 @@ class _MapViewScreenState extends ConsumerState<MapViewScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Cekici'),
+        title: Text('cekici'.tr()),
         actions: [
           IconButton(
             icon: const Icon(Icons.credit_card),
@@ -418,7 +445,7 @@ class _MapViewScreenState extends ConsumerState<MapViewScreen> {
                     ? null
                     : _openBookingConfirmation,
                 icon: const Icon(Icons.add_road),
-                label: const Text('Request Tow Truck'),
+                label: Text('request_tow_truck'.tr()),
               ),
             ),
           ],

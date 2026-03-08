@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:http/http.dart' as http;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../models/models.dart';
@@ -23,15 +24,18 @@ class SupabaseService {
   static bool get isInitialized => _initialized;
 
   /// Initializes the Supabase connection. Call once at app startup.
+  /// [httpClient] optional: e.g. [SupabaseHttpClient] to report non-200 as non-fatal.
   static Future<void> initialize({
     String? url,
     String? anonKey,
+    http.Client? httpClient,
   }) async {
     _url = url ?? _url;
     _anonKey = anonKey ?? _anonKey;
     await Supabase.initialize(
       url: SupabaseService.url,
       anonKey: SupabaseService.anonKey,
+      httpClient: httpClient,
     );
     _initialized = true;
   }

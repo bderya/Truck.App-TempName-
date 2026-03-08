@@ -2,8 +2,10 @@ import 'package:country_code_picker/country_code_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../core/constants.dart' show consentVersion;
 import '../../../core/providers.dart';
 import '../../../models/models.dart';
+import '../../legal/legal_document_screen.dart';
 
 /// Lazy registration: bottom sheet with phone + SMS OTP.
 /// On success ensures a user in [users] with [user_type: 'client'] and returns it.
@@ -23,6 +25,8 @@ class _LazyAuthBottomSheetState extends ConsumerState<LazyAuthBottomSheet> {
   String _phoneE164 = '';
   bool _loading = false;
   String? _error;
+  bool _agreedKvkk = false;
+  bool _agreedEula = false;
 
   @override
   void dispose() {
@@ -74,10 +78,13 @@ class _LazyAuthBottomSheetState extends ConsumerState<LazyAuthBottomSheet> {
     try {
       final auth = ref.read(authServiceProvider);
       await auth.verifyOtp(_phoneE164, token);
+      final now = DateTime.now().toUtc();
       User appUser = await auth.getUserByPhone(_phoneE164) ?? await auth.createUser(
             phoneNumber: _phoneE164,
             fullName: 'Client',
             userType: 'client',
+            consentVersion: consentVersion,
+            consentDate: now,
           );
       if (!mounted) return;
       Navigator.of(context).pop(appUser);
@@ -118,8 +125,22 @@ class _LazyAuthBottomSheetState extends ConsumerState<LazyAuthBottomSheet> {
                     color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7),
                   ),
             ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 16),
           if (!_otpSent) ...[
+            _ConsentCheckbox(
+              value: _agreedKvkk,
+              label: 'Gizlilik Politikası (KVKK)',
+              onTap: () => LegalDocumentScreen.open(context, assetPath: 'assets/legal/kvkk.html', title: 'Gizlilik Politikası'),
+              onChanged: (v) => setState(() => _agreedKvkk = v ?? false),
+            ),
+            const SizedBox(height: 8),
+            _ConsentCheckbox(
+              value: _agreedEula,
+              label: 'Kullanım Koşulları (EULA)',
+              onTap: () => LegalDocumentScreen.open(context, assetPath: 'assets/legal/eula.html', title: 'Kullanım Koşulları'),
+              onChanged: (v) => setState(() => _agreedEula = v ?? false),
+            ),
+            const SizedBox(height: 20),
             Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -177,7 +198,7 @@ class _LazyAuthBottomSheetState extends ConsumerState<LazyAuthBottomSheet> {
           ],
           const SizedBox(height: 20),
           FilledButton(
-            onPressed: _loading
+            onPressed: (_loading || (!_otpSent && (!_agreedKvkk || !_agreedEula)))
                 ? null
                 : (_otpSent ? _verifyAndReturnClient : _sendOtp),
             style: FilledButton.styleFrom(
@@ -193,6 +214,51 @@ class _LazyAuthBottomSheetState extends ConsumerState<LazyAuthBottomSheet> {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Checkbox row with tappable label that opens a legal document.
+class _ConsentCheckbox extends StatelessWidget {
+  const _ConsentCheckbox({
+    required this.value,
+    required this.label,
+    required this.onTap,
+    required this.onChanged,
+  });
+
+  final bool value;
+  final String label;
+  final VoidCallback onTap;
+  final ValueChanged<bool?> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Checkbox(
+          value: value,
+          onChanged: onChanged,
+          materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        ),
+        Expanded(
+          child: GestureDetector(
+            onTap: onTap,
+            child: Padding(
+              padding: const EdgeInsets.only(top: 12),
+              child: Text(
+                label,
+                style: TextStyle(
+                  decoration: TextDecoration.underline,
+                  color: Theme.of(context).colorScheme.primary,
+                  fontSize: 14,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 }

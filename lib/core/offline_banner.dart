@@ -1,8 +1,8 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'connectivity_provider.dart';
-import 'error_messages_tr.dart';
 
 /// Wraps [child] and shows a persistent top banner when offline.
 class OfflineBanner extends ConsumerWidget {
@@ -36,7 +36,7 @@ class OfflineBanner extends ConsumerWidget {
                         const SizedBox(width: 12),
                         Expanded(
                           child: Text(
-                            ErrorMessagesTr.offline,
+                            'offline_banner'.tr(),
                             style: const TextStyle(
                               color: Colors.white,
                               fontWeight: FontWeight.w500,

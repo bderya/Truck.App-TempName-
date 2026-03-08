@@ -1,6 +1,6 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 
-import '../../../core/error_messages_tr.dart';
 import '../../../services/payment/payment_types.dart';
 import 'add_card_sheet.dart';
 
@@ -34,7 +34,7 @@ Future<void> showPaymentFailureSheet(
           ),
           const SizedBox(height: 16),
           Text(
-            ErrorMessagesTr.paymentFailed,
+            'payment_failed'.tr(),
             style: Theme.of(context).textTheme.titleLarge?.copyWith(
                   fontWeight: FontWeight.bold,
                 ),
@@ -52,7 +52,7 @@ Future<void> showPaymentFailureSheet(
               if (added && context.mounted) onUpdatePaymentMethod?.call();
             },
             icon: const Icon(Icons.credit_card),
-            label: const Text(ErrorMessagesTr.updatePaymentMethod),
+            label: Text('update_payment_method'.tr()),
             style: FilledButton.styleFrom(
               padding: const EdgeInsets.symmetric(vertical: 14),
             ),
@@ -60,7 +60,7 @@ Future<void> showPaymentFailureSheet(
           const SizedBox(height: 8),
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Kapat'),
+            child: Text('close'.tr()),
           ),
         ],
       ),

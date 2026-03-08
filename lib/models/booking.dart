@@ -23,6 +23,15 @@ class Booking {
     this.destinationLat,
     this.destinationLng,
     this.vehicleValueTier,
+    this.isSurgePricing = false,
+    this.driverNetAmount,
+    this.platformCommissionPercent,
+    this.cancelledBy,
+    this.cancelledAt,
+    this.acceptedAt,
+    this.estimatedArrivalAt,
+    this.driverStartedAt,
+    this.isPriorityRematch = false,
   });
 
   final int id;
@@ -55,6 +64,23 @@ class Booking {
   final double? destinationLng;
   /// low, medium, high. High value restricts job to Gold drivers only.
   final String? vehicleValueTier;
+  /// When true, platform commission is reduced by 5% for this booking.
+  final bool isSurgePricing;
+  /// Net amount sent to driver (set at completion).
+  final double? driverNetAmount;
+  /// Platform commission % applied (set at completion).
+  final double? platformCommissionPercent;
+  /// Who cancelled: 'client' or 'driver'.
+  final String? cancelledBy;
+  final DateTime? cancelledAt;
+  /// When the driver accepted the booking.
+  final DateTime? acceptedAt;
+  /// Estimated arrival at pickup (for penalty: 50% through time).
+  final DateTime? estimatedArrivalAt;
+  /// When driver status became on_the_way.
+  final DateTime? driverStartedAt;
+  /// True when re-opened after driver cancel; high priority for other drivers.
+  final bool isPriorityRematch;
 
   factory Booking.fromJson(Map<String, dynamic> json) {
     final damagePhotosRaw = json['damage_photos'];
@@ -93,6 +119,15 @@ class Booking {
       destinationLat: (json['destination_lat'] as num?)?.toDouble(),
       destinationLng: (json['destination_lng'] as num?)?.toDouble(),
       vehicleValueTier: json['vehicle_value_tier'] as String?,
+      isSurgePricing: json['is_surge_pricing'] as bool? ?? false,
+      driverNetAmount: (json['driver_net_amount'] as num?)?.toDouble(),
+      platformCommissionPercent: (json['platform_commission_percent'] as num?)?.toDouble(),
+      cancelledBy: json['cancelled_by'] as String?,
+      cancelledAt: json['cancelled_at'] != null ? DateTime.parse(json['cancelled_at'] as String) : null,
+      acceptedAt: json['accepted_at'] != null ? DateTime.parse(json['accepted_at'] as String) : null,
+      estimatedArrivalAt: json['estimated_arrival_at'] != null ? DateTime.parse(json['estimated_arrival_at'] as String) : null,
+      driverStartedAt: json['driver_started_at'] != null ? DateTime.parse(json['driver_started_at'] as String) : null,
+      isPriorityRematch: json['is_priority_rematch'] as bool? ?? false,
     );
   }
 
@@ -119,6 +154,15 @@ class Booking {
         if (destinationLat != null) 'destination_lat': destinationLat,
         if (destinationLng != null) 'destination_lng': destinationLng,
         if (vehicleValueTier != null) 'vehicle_value_tier': vehicleValueTier,
+        'is_surge_pricing': isSurgePricing,
+        if (driverNetAmount != null) 'driver_net_amount': driverNetAmount,
+        if (platformCommissionPercent != null) 'platform_commission_percent': platformCommissionPercent,
+        if (cancelledBy != null) 'cancelled_by': cancelledBy,
+        if (cancelledAt != null) 'cancelled_at': cancelledAt!.toIso8601String(),
+        if (acceptedAt != null) 'accepted_at': acceptedAt!.toIso8601String(),
+        if (estimatedArrivalAt != null) 'estimated_arrival_at': estimatedArrivalAt!.toIso8601String(),
+        if (driverStartedAt != null) 'driver_started_at': driverStartedAt!.toIso8601String(),
+        'is_priority_rematch': isPriorityRematch,
       };
 
   Booking copyWith({
@@ -144,6 +188,15 @@ class Booking {
     double? destinationLat,
     double? destinationLng,
     String? vehicleValueTier,
+    bool? isSurgePricing,
+    double? driverNetAmount,
+    double? platformCommissionPercent,
+    String? cancelledBy,
+    DateTime? cancelledAt,
+    DateTime? acceptedAt,
+    DateTime? estimatedArrivalAt,
+    DateTime? driverStartedAt,
+    bool? isPriorityRematch,
   }) =>
       Booking(
         id: id ?? this.id,
@@ -169,6 +222,15 @@ class Booking {
         destinationLat: destinationLat ?? this.destinationLat,
         destinationLng: destinationLng ?? this.destinationLng,
         vehicleValueTier: vehicleValueTier ?? this.vehicleValueTier,
+        isSurgePricing: isSurgePricing ?? this.isSurgePricing,
+        driverNetAmount: driverNetAmount ?? this.driverNetAmount,
+        platformCommissionPercent: platformCommissionPercent ?? this.platformCommissionPercent,
+        cancelledBy: cancelledBy ?? this.cancelledBy,
+        cancelledAt: cancelledAt ?? this.cancelledAt,
+        acceptedAt: acceptedAt ?? this.acceptedAt,
+        estimatedArrivalAt: estimatedArrivalAt ?? this.estimatedArrivalAt,
+        driverStartedAt: driverStartedAt ?? this.driverStartedAt,
+        isPriorityRematch: isPriorityRematch ?? this.isPriorityRematch,
       );
 
   @override

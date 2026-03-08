@@ -1,10 +1,15 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
-import 'package:url_launcher/url_launcher.dart';
 
+import '../../../core/providers.dart';
 import '../../../models/models.dart';
+import '../../../services/background_geolocation_service.dart';
+import '../../../services/external_navigation_service.dart';
 import '../../../services/location_service.dart';
+import '../widgets/location_permission_rationale_dialog.dart';
 import '../../chat/chat_screen.dart';
 import 'delivery_signature_screen.dart';
 import 'pre_pickup_photo_screen.dart';
@@ -13,7 +18,7 @@ import 'pre_pickup_photo_screen.dart';
 /// and option to open in external maps app.
 /// When [towTruckId] is set, starts high-frequency location sync to [tow_trucks]
 /// so the client can track the driver in real time.
-class JobNavigationScreen extends StatefulWidget {
+class JobNavigationScreen extends ConsumerStatefulWidget {
   const JobNavigationScreen({
     super.key,
     required this.booking,
@@ -26,24 +31,89 @@ class JobNavigationScreen extends StatefulWidget {
   final LocationService locationService;
 
   @override
-  State<JobNavigationScreen> createState() => _JobNavigationScreenState();
+  ConsumerState<JobNavigationScreen> createState() => _JobNavigationScreenState();
 }
 
-class _JobNavigationScreenState extends State<JobNavigationScreen> {
+class _JobNavigationScreenState extends ConsumerState<JobNavigationScreen> {
+  bool _cancelLoading = false;
+  bool _usingBackgroundGeolocation = false;
   @override
   void initState() {
     super.initState();
-    if (widget.towTruckId != null) {
-      widget.locationService.startHighFrequencyLocationSync(
-        towTruckId: widget.towTruckId!,
-      );
+    final towTruckId = widget.towTruckId;
+    if (towTruckId != null) {
+      if (useBackgroundGeolocation) {
+        WidgetsBinding.instance.addPostFrameCallback((_) => _startTrackingWithPermission(towTruckId));
+      } else {
+        widget.locationService.startHighFrequencyLocationSync(
+          towTruckId: towTruckId,
+        );
+      }
+    }
+  }
+
+  Future<void> _startTrackingWithPermission(int towTruckId) async {
+    if (!mounted) return;
+    final granted = await requestLocationPermissionWithRationale(context);
+    if (!mounted) return;
+    if (granted) {
+      _usingBackgroundGeolocation = true;
+      await ref.read(backgroundGeolocationDriverServiceProvider).start(towTruckId);
+    } else {
+      widget.locationService.startHighFrequencyLocationSync(towTruckId: towTruckId);
     }
   }
 
   @override
   void dispose() {
-    widget.locationService.stopLocationStream();
+    if (_usingBackgroundGeolocation) {
+      ref.read(backgroundGeolocationDriverServiceProvider).stop();
+    } else {
+      widget.locationService.stopLocationStream();
+    }
     super.dispose();
+  }
+
+  Future<void> _cancelJob() async {
+    final driverId = widget.booking.driverId;
+    if (driverId == null) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('cancel_job'.tr()),
+        content: Text('cancel_job_confirm'.tr()),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text('no'.tr()),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text('yes_cancel'.tr()),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() => _cancelLoading = true);
+    final service = ref.read(driverCancellationServiceProvider);
+    final result = await service.cancelBookingByDriver(
+      bookingId: widget.booking.id,
+      driverId: driverId,
+    );
+    if (!mounted) return;
+    setState(() => _cancelLoading = false);
+    if (result.ok) {
+      Navigator.of(context).popUntil((route) => route.isFirst);
+      String msg = 'İş iptal edildi. Müşteri yeniden eşleştiriliyor.';
+      if (result.penaltyApplied) msg += ' 250 ₺ ceza uygulandı.';
+      if (result.suspended) msg += ' 7 günde 3 iptal: 48 saat askıya alındınız.';
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(result.error ?? 'cancel_failed'.tr())),
+      );
+    }
   }
 
   @override
@@ -53,7 +123,7 @@ class _JobNavigationScreenState extends State<JobNavigationScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Navigate to pickup'),
+        title: Text('navigate_to_pickup'.tr()),
         actions: [
           if (widget.booking.driverId != null)
             IconButton(
@@ -123,15 +193,28 @@ class _JobNavigationScreenState extends State<JobNavigationScreen> {
                   ),
                   const SizedBox(height: 16),
                   FilledButton.icon(
-                    onPressed: () => _openInMaps(widget.booking.pickupLat, widget.booking.pickupLng),
+                    onPressed: () => _startNavigation(),
                     icon: const Icon(Icons.navigation),
-                    label: const Text('Open in Maps'),
+                    label: Text('start_navigation'.tr()),
                   ),
                   const SizedBox(height: 12),
                   OutlinedButton.icon(
                     onPressed: () => _openPrePickupPhotos(context),
                     icon: const Icon(Icons.camera_alt),
-                    label: const Text('Take pre-pickup photos'),
+                    label: Text('take_pre_pickup_photos'.tr()),
+                  ),
+                  const SizedBox(height: 8),
+                  TextButton.icon(
+                    onPressed: _cancelLoading ? null : _cancelJob,
+                    icon: _cancelLoading
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.cancel_outlined, size: 20),
+                    label: Text('cancel_job'.tr()),
+                    style: TextButton.styleFrom(foregroundColor: Theme.of(context).colorScheme.error),
                   ),
                 ],
               ),
@@ -163,12 +246,8 @@ class _JobNavigationScreenState extends State<JobNavigationScreen> {
     );
   }
 
-  Future<void> _openInMaps(double lat, double lng) async {
-    final url = Uri.parse(
-      'https://www.google.com/maps/dir/?api=1&destination=$lat,$lng',
-    );
-    if (await canLaunchUrl(url)) {
-      await launchUrl(url, mode: LaunchMode.externalApplication);
-    }
+  void _startNavigation() {
+    final target = ExternalNavigationService.getTargetForBooking(widget.booking);
+    ExternalNavigationService.showMapPickerAndNavigate(context, target: target);
   }
 }

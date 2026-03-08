@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:audioplayers/audioplayers.dart';
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/constants.dart';
@@ -129,6 +130,12 @@ class _JobRequestOverlayState extends State<JobRequestOverlay> {
               elevation: 8,
               borderRadius: BorderRadius.circular(20),
               color: Theme.of(context).colorScheme.surface,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+                side: widget.booking.isPriorityRematch
+                    ? const BorderSide(color: Colors.red, width: 3)
+                    : BorderSide.none,
+              ),
               child: Padding(
                 padding: const EdgeInsets.all(24),
                 child: Column(
@@ -139,7 +146,7 @@ class _JobRequestOverlayState extends State<JobRequestOverlay> {
                       children: [
                         Expanded(
                           child: Text(
-                            'New Job Request',
+                            'new_job_request'.tr(),
                             style: Theme.of(context).textTheme.titleLarge?.copyWith(
                                   fontWeight: FontWeight.bold,
                                 ),
@@ -153,9 +160,25 @@ class _JobRequestOverlayState extends State<JobRequestOverlay> {
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: Text(
-                              'Intercity',
+                              'intercity'.tr(),
                               style: Theme.of(context).textTheme.labelMedium?.copyWith(
                                     color: Theme.of(context).colorScheme.onTertiaryContainer,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                            ),
+                          ),
+                        if (widget.booking.isPriorityRematch)
+                          Container(
+                            margin: const EdgeInsets.only(left: 8),
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: Colors.red.shade100,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              'priority'.tr(),
+                              style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                                    color: Colors.red.shade900,
                                     fontWeight: FontWeight.w600,
                                   ),
                             ),
@@ -203,7 +226,7 @@ class _JobRequestOverlayState extends State<JobRequestOverlay> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                'Estimated Earning',
+                                'estimated_earning'.tr(),
                                 style: Theme.of(context).textTheme.labelMedium?.copyWith(
                                       color: Theme.of(context)
                                           .colorScheme
@@ -229,7 +252,7 @@ class _JobRequestOverlayState extends State<JobRequestOverlay> {
                                   ),
                                   const SizedBox(width: 6),
                                   Text(
-                                    '${widget.pickupDistanceKm.toStringAsFixed(1)} km away',
+                                    '${widget.pickupDistanceKm.toStringAsFixed(1)} ${'km_away'.tr()}',
                                     style: Theme.of(context).textTheme.titleSmall,
                                   ),
                                 ],
@@ -257,7 +280,7 @@ class _JobRequestOverlayState extends State<JobRequestOverlay> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                'Customer vehicle',
+                                'customer_vehicle'.tr(),
                                 style: Theme.of(context).textTheme.labelSmall?.copyWith(
                                       color: Theme.of(context)
                                           .colorScheme
@@ -279,13 +302,13 @@ class _JobRequestOverlayState extends State<JobRequestOverlay> {
                     const SizedBox(height: 12),
                     _InfoRow(
                       icon: Icons.location_on,
-                      label: 'Pickup',
+                      label: 'pickup'.tr(),
                       value: widget.booking.pickupAddress,
                     ),
                     const SizedBox(height: 6),
                     _InfoRow(
                       icon: Icons.flag,
-                      label: 'Destination',
+                      label: 'destination'.tr(),
                       value: widget.booking.destinationAddress,
                     ),
                     const SizedBox(height: 24),
@@ -295,7 +318,7 @@ class _JobRequestOverlayState extends State<JobRequestOverlay> {
                           child: OutlinedButton.icon(
                             onPressed: _onDecline,
                             icon: const Icon(Icons.close),
-                            label: const Text('Decline'),
+                            label: Text('decline'.tr()),
                             style: OutlinedButton.styleFrom(
                               foregroundColor: Theme.of(context).colorScheme.error,
                               side: BorderSide(
@@ -310,7 +333,7 @@ class _JobRequestOverlayState extends State<JobRequestOverlay> {
                           child: FilledButton.icon(
                             onPressed: _onAccept,
                             icon: const Icon(Icons.check),
-                            label: const Text('Accept'),
+                            label: Text('accept'.tr()),
                             style: FilledButton.styleFrom(
                               padding: const EdgeInsets.symmetric(vertical: 14),
                             ),

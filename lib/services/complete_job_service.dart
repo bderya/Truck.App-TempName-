@@ -2,6 +2,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../core/constants.dart';
 import '../models/models.dart';
+import 'commission_service.dart';
 import 'payment/payment_service.dart';
 import 'payment/payment_types.dart';
 
@@ -29,11 +30,14 @@ class CompleteJobService {
   CompleteJobService({
     SupabaseClient? client,
     PaymentService? paymentService,
+    CommissionService? commissionService,
   })  : _client = client ?? Supabase.instance.client,
-        _paymentService = paymentService;
+        _paymentService = paymentService,
+        _commissionService = commissionService;
 
   final SupabaseClient _client;
   final PaymentService? _paymentService;
+  final CommissionService? _commissionService;
 
   static const int _requiredDamagePhotos = 4;
 
@@ -74,12 +78,26 @@ class CompleteJobService {
         ? endedAt.difference(booking.createdAt!)
         : null;
 
+    CommissionSplit? commissionSplit;
+    if (_commissionService != null && booking.price != null && booking.price! > 0) {
+      commissionSplit = await _commissionService!.calculateNetEarnings(
+        totalPrice: booking.price!,
+        driverId: driverId,
+        bookingId: booking.id,
+      );
+    }
+
     try {
-      await _client.from('bookings').update({
+      final firstUpdate = <String, dynamic>{
         'status': 'completed',
         'ended_at': endedAt.toIso8601String(),
         'updated_at': endedAt.toIso8601String(),
-      }).eq('id', booking.id);
+      };
+      if (commissionSplit != null) {
+        firstUpdate['driver_net_amount'] = commissionSplit.driverNetAmount;
+        firstUpdate['platform_commission_percent'] = commissionSplit.commissionPercent;
+      }
+      await _client.from('bookings').update(firstUpdate).eq('id', booking.id);
 
       await _client.from('tow_trucks').update({
         'is_available': true,
@@ -97,12 +115,17 @@ class CompleteJobService {
           driverStripeAccountId.isNotEmpty &&
           booking.price != null &&
           booking.price! > 0) {
+        final platformPercent = commissionSplit?.platformPercent ?? AppConstants.platformCommissionRate;
+        final driverPercent = commissionSplit?.driverPercent ?? (1.0 - platformPercent);
+
         final result = await _paymentService!.distributeFunds(
           cardTokenId: cardTokenId,
           totalAmount: booking.price!,
           currency: 'TRY',
           bookingId: booking.id.toString(),
           driverStripeAccountId: driverStripeAccountId,
+          platformPercent: platformPercent,
+          driverPercent: driverPercent,
         );
         if (result is PaymentSuccess<SplitBreakdown>) {
           paymentCaptured = true;
@@ -115,6 +138,8 @@ class CompleteJobService {
       final updatedBooking = booking.copyWith(
         status: 'completed',
         endedAt: endedAt,
+        driverNetAmount: commissionSplit?.driverNetAmount ?? driverEarnings,
+        platformCommissionPercent: commissionSplit?.commissionPercent,
       );
 
       return CompleteJobResult(
@@ -123,6 +148,7 @@ class CompleteJobService {
         paymentCaptured: paymentCaptured,
         paymentError: paymentError,
         driverEarnings: driverEarnings ??
+            commissionSplit?.driverNetAmount ??
             (booking.price != null
                 ? booking.price! * (1 - AppConstants.platformCommissionRate)
                 : null),

@@ -96,4 +96,25 @@ class ProofOfWorkService {
       'updated_at': DateTime.now().toIso8601String(),
     }).eq('id', bookingId);
   }
+
+  /// Uploads one inspection photo for weekly audit. Path: inspection/{truckId}/{ts}/photo_{index}.jpg
+  Future<String> uploadInspectionPhoto({
+    required int truckId,
+    required File file,
+    required int photoIndex,
+  }) async {
+    final compressed = await compressImage(file);
+    final ts = DateTime.now().millisecondsSinceEpoch;
+    final ext = p.extension(file.path).toLowerCase();
+    final name = 'photo_$photoIndex${ext.isEmpty ? '.jpg' : ext}';
+    final path = 'inspection/$truckId/$ts/$name';
+
+    await _client.storage.from('proof-of-work').upload(
+          path,
+          compressed,
+          fileOptions: const FileOptions(upsert: true),
+        );
+
+    return _client.storage.from('proof-of-work').getPublicUrl(path);
+  }
 }

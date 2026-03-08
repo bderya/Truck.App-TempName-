@@ -4,3 +4,5 @@ export 'booking.dart';
 export 'user_payment_method.dart';
 export 'receipt_data.dart';
 export 'chat_message.dart';
+export 'wallet.dart';
+export 'wallet_transaction.dart';

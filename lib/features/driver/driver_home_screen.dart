@@ -1,3 +1,4 @@
+import 'package:easy_localization/easy_localization.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -42,6 +43,9 @@ class DriverHomeScreen extends ConsumerWidget {
             if (!user.isVerified) {
               return VerificationInProgressScreen(statusLabel: user.status);
             }
+            if (!user.isActive && user.suspendedUntil != null && user.suspendedUntil!.isAfter(DateTime.now())) {
+              return _SuspendedScreen(suspendedUntil: user.suspendedUntil!);
+            }
             _setDriverIdOnce(ref, user.id);
             return const DriverMapScreen();
           },
@@ -67,6 +71,58 @@ class DriverHomeScreen extends ConsumerWidget {
   }
 }
 
+class _SuspendedScreen extends StatelessWidget {
+  const _SuspendedScreen({required this.suspendedUntil});
+
+  final DateTime suspendedUntil;
+
+  @override
+  Widget build(BuildContext context) {
+    final until = suspendedUntil.isUtc ? suspendedUntil.toLocal() : suspendedUntil;
+    return Scaffold(
+      appBar: AppBar(title: Text('driver_title'.tr())),
+      body: SafeArea(
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 32),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.block,
+                  size: 64,
+                  color: Theme.of(context).colorScheme.error.withValues(alpha: 0.8),
+                ),
+                const SizedBox(height: 24),
+                Text(
+                  'account_suspended'.tr(),
+                  style: Theme.of(context).textTheme.titleLarge,
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  '7 günde 3 iptal nedeniyle 48 saat süreyle iş alamıyorsunuz.',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7),
+                      ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  '${'suspended_until'.tr()}: ${until.day}.${until.month}.${until.year} ${until.hour.toString().padLeft(2, '0')}:${until.minute.toString().padLeft(2, '0')}',
+                  style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _DriverRegistrationPrompt extends StatelessWidget {
   const _DriverRegistrationPrompt({required this.userName, required this.onStart});
 
@@ -76,7 +132,7 @@ class _DriverRegistrationPrompt extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Driver - Cekici')),
+      appBar: AppBar(title: Text('driver_title'.tr())),
       body: SafeArea(
         child: Center(
           child: Padding(
@@ -91,13 +147,13 @@ class _DriverRegistrationPrompt extends StatelessWidget {
                 ),
                 const SizedBox(height: 24),
                 Text(
-                  'Register as a driver',
+                  'register_as_driver'.tr(),
                   style: Theme.of(context).textTheme.titleLarge,
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  'Complete the form with your details, plate number, truck type, and photos of your license and vehicle registration.',
+                  'register_prompt_body'.tr(),
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                         color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7),
                       ),
@@ -107,7 +163,7 @@ class _DriverRegistrationPrompt extends StatelessWidget {
                 FilledButton.icon(
                   onPressed: onStart,
                   icon: const Icon(Icons.app_registration),
-                  label: const Text('Start registration'),
+                  label: Text('start_registration'.tr()),
                 ),
               ],
             ),
@@ -122,7 +178,7 @@ class _SignInRequired extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Driver - Cekici')),
+      appBar: AppBar(title: Text('driver_title'.tr())),
       body: SafeArea(
         child: Center(
           child: Padding(
@@ -137,13 +193,13 @@ class _SignInRequired extends StatelessWidget {
                 ),
                 const SizedBox(height: 24),
                 Text(
-                  'Sign in required',
+                  'sign_in_required'.tr(),
                   style: Theme.of(context).textTheme.titleLarge,
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  'Use the main app to sign in with your phone, then open Driver App again.',
+                  'sign_in_required_body'.tr(),
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                         color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.7),
                       ),
@@ -153,7 +209,7 @@ class _SignInRequired extends StatelessWidget {
                 FilledButton.icon(
                   onPressed: () => Navigator.of(context).pop(),
                   icon: const Icon(Icons.arrow_back),
-                  label: const Text('Back'),
+                  label: Text('back'.tr()),
                 ),
               ],
             ),

@@ -1,5 +1,6 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../core/constants.dart' show consentVersion as defaultConsentVersion;
 import '../core/supabase_service.dart';
 import '../models/models.dart' show User;
 
@@ -71,18 +72,35 @@ class AuthService {
   }
 
   /// Creates a new user in public.users (Complete Profile). [userType] default 'client'.
+  /// [consentVersion] and [consentDate] stored for legal compliance (e.g. KVKK / App Store).
   Future<User> createUser({
     required String phoneNumber,
     required String fullName,
     String? email,
     String userType = 'client',
+    String? consentVersion,
+    DateTime? consentDate,
   }) async {
+    final now = DateTime.now().toUtc();
+    final version = consentVersion ?? defaultConsentVersion;
+    final date = consentDate ?? now;
     final res = await _client.from('users').insert({
       'phone_number': phoneNumber,
       'full_name': fullName,
       if (email != null && email.isNotEmpty) 'email': email,
       'user_type': userType,
+      if (version != null) 'consent_version': version,
+      if (date != null) 'consent_date': date.toIso8601String(),
     }).select().single();
     return User.fromJson(res as Map<String, dynamic>);
+  }
+
+  /// Updates consent fields for an existing user (e.g. driver after onboarding).
+  Future<void> updateUserConsent(int userId, {required String version, required DateTime date}) async {
+    await _client.from('users').update({
+      'consent_version': version,
+      'consent_date': date.toIso8601String(),
+      'updated_at': date.toIso8601String(),
+    }).eq('id', userId);
   }
 }

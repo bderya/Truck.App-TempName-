@@ -49,7 +49,8 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Call RPC to capture the pre-authorized payment and distribute funds.
+    // Call RPC: returns dynamic split (driver_net_amount, platform_amount, platform_percent, driver_percent)
+    // from calculate_net_earnings (tier + surge). Use these when calling Stripe/Iyzico split API.
     const { data, error } = await supabase.rpc("payment_capture_on_booking_complete", {
       p_booking_id: bookingId,
     });

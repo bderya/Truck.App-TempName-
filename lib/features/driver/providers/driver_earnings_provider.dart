@@ -23,8 +23,11 @@ Future<List<Booking>> _fetchCompletedBookings(int driverId) async {
       .toList();
 }
 
-/// Net payout for a booking (price minus platform commission).
+/// Net payout for a booking. Uses stored driver_net_amount when set (dynamic commission), else fallback.
 double netPayout(Booking b) {
+  if (b.driverNetAmount != null && b.driverNetAmount! > 0) {
+    return b.driverNetAmount!;
+  }
   final price = b.price ?? 0;
   return price * (1 - AppConstants.platformCommissionRate);
 }
