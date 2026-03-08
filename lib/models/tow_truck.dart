@@ -10,6 +10,7 @@ class TowTruck {
     required this.currentLatitude,
     required this.currentLongitude,
     this.isAvailable = true,
+    this.plateImageUrl,
     this.createdAt,
     this.updatedAt,
   });
@@ -21,6 +22,7 @@ class TowTruck {
   final double currentLatitude;
   final double currentLongitude;
   final bool isAvailable;
+  final String? plateImageUrl;
   final DateTime? createdAt;
   final DateTime? updatedAt;
 
@@ -32,6 +34,7 @@ class TowTruck {
         currentLatitude: (json['current_latitude'] as num).toDouble(),
         currentLongitude: (json['current_longitude'] as num).toDouble(),
         isAvailable: json['is_available'] as bool? ?? true,
+        plateImageUrl: json['plate_image_url'] as String?,
         createdAt: json['created_at'] != null
             ? DateTime.parse(json['created_at'] as String)
             : null,
@@ -48,6 +51,7 @@ class TowTruck {
         'current_latitude': currentLatitude,
         'current_longitude': currentLongitude,
         'is_available': isAvailable,
+        if (plateImageUrl != null) 'plate_image_url': plateImageUrl,
         if (createdAt != null) 'created_at': createdAt!.toIso8601String(),
         if (updatedAt != null) 'updated_at': updatedAt!.toIso8601String(),
       };
@@ -70,6 +74,7 @@ class TowTruck {
     double? currentLatitude,
     double? currentLongitude,
     bool? isAvailable,
+    String? plateImageUrl,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) =>
@@ -81,6 +86,7 @@ class TowTruck {
         currentLatitude: currentLatitude ?? this.currentLatitude,
         currentLongitude: currentLongitude ?? this.currentLongitude,
         isAvailable: isAvailable ?? this.isAvailable,
+        plateImageUrl: plateImageUrl ?? this.plateImageUrl,
         createdAt: createdAt ?? this.createdAt,
         updatedAt: updatedAt ?? this.updatedAt,
       );

@@ -17,4 +17,10 @@ class AppConstants {
     'heavy': 5.0,
     'motorcycle': 2.0,
   };
+
+  /// Currency symbol for display.
+  static const String currencySymbol = '₺';
+
+  /// Platform commission rate (0.0–1.0) for admin earnings.
+  static const double platformCommissionRate = 0.15;
 }

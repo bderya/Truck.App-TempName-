@@ -35,6 +35,14 @@ lib/
 └── main.dart
 ```
 
+## Driver verification & Admin approval
+
+- **Driver app**: If the driver's user row has `is_verified = false`, they only see a "Verification in Progress" screen and cannot open the job map until an admin approves.
+- **Verification fields**: `users` has `is_verified`, `status` (pending/approved/rejected), `license_image_url`, `criminal_record_url`; `tow_trucks` has `plate_image_url`.
+- **Admin approval**: Run the migrations in `supabase/migrations/` then use either:
+  - **App**: Open "Admin – Approval" from the home screen, enter user ID and status (pending/approved/rejected), then Apply.
+  - **Supabase Dashboard SQL**: `SELECT approve_user(123, 'approved');` or `SELECT set_user_verified(123, true);`
+
 ## Dependencies
 
 - **supabase_flutter** – Backend & auth

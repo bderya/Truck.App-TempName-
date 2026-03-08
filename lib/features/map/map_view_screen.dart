@@ -3,9 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 
-import '../../core/constants.dart';
 import '../../models/models.dart';
-import '../../services/location_service.dart';
 import 'providers/map_providers.dart';
 import 'widgets/booking_bottom_sheet.dart';
 
@@ -46,12 +44,17 @@ class _MapViewScreenState extends ConsumerState<MapViewScreen> {
       });
       _mapController.move(_userLocation!, 14);
 
-      final trucks = await service.getNearestAvailableTowTrucks(
-        latitude: position.latitude,
-        longitude: position.longitude,
-        radiusKm: 10,
-        limit: 10,
-      );
+      List<TowTruck> trucks = [];
+      try {
+        trucks = await service.getNearestAvailableTowTrucks(
+          latitude: position.latitude,
+          longitude: position.longitude,
+          radiusKm: 10,
+          limit: 10,
+        );
+      } catch (_) {
+        // RPC may not exist yet; use empty list
+      }
 
       if (mounted) {
         setState(() {
@@ -163,6 +166,21 @@ class _MapViewScreenState extends ConsumerState<MapViewScreen> {
                       Expanded(
                         child: Text(
                           _error!,
+                          style: TextStyle(
+                            color: Theme.of(context)
+                                .colorScheme
+                                .onErrorContainer,
+                          ),
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: () async {
+                          final service = ref.read(locationServiceProvider);
+                          await service.requestBackgroundLocationPermission();
+                          _loadUserLocationAndTrucks();
+                        },
+                        child: Text(
+                          'Retry',
                           style: TextStyle(
                             color: Theme.of(context)
                                 .colorScheme

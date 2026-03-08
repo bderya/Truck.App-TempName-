@@ -21,18 +21,24 @@ CREATE TYPE booking_status AS ENUM (
   'cancelled'
 );
 
+CREATE TYPE user_verification_status AS ENUM ('pending', 'approved', 'rejected');
+
 -- -----------------------------------------------------------------------------
 -- TABLES
 -- -----------------------------------------------------------------------------
 
 CREATE TABLE users (
-  id              BIGSERIAL PRIMARY KEY,
-  phone_number    VARCHAR(20) NOT NULL UNIQUE,
-  full_name       VARCHAR(255) NOT NULL,
-  user_type       user_type NOT NULL,
-  avatar_url      TEXT,
-  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  id                  BIGSERIAL PRIMARY KEY,
+  phone_number        VARCHAR(20) NOT NULL UNIQUE,
+  full_name           VARCHAR(255) NOT NULL,
+  user_type           user_type NOT NULL,
+  avatar_url          TEXT,
+  is_verified         BOOLEAN NOT NULL DEFAULT FALSE,
+  status              user_verification_status NOT NULL DEFAULT 'pending',
+  license_image_url   TEXT,
+  criminal_record_url TEXT,
+  created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
 CREATE TABLE tow_trucks (
@@ -43,6 +49,7 @@ CREATE TABLE tow_trucks (
   current_latitude    DOUBLE PRECISION NOT NULL DEFAULT 0,
   current_longitude   DOUBLE PRECISION NOT NULL DEFAULT 0,
   is_available        BOOLEAN NOT NULL DEFAULT TRUE,
+  plate_image_url     TEXT,
   created_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at          TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   CONSTRAINT valid_driver CHECK (
