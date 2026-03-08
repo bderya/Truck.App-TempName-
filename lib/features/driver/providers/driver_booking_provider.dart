@@ -148,7 +148,6 @@ final currentDriverTruckProvider = FutureProvider<TowTruck?>((ref) async {
         .from('tow_trucks')
         .select()
         .eq('driver_id', driverId)
-        .eq('is_available', true)
         .maybeSingle();
 
     if (response == null) return null;

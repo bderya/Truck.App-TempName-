@@ -12,6 +12,16 @@ abstract class PaymentService {
     String? customerId,
   });
 
+  /// Pre-authorizes payment (auth only, no capture). Use for Request Tow; store returned
+  /// [payment_id] on the booking and capture when job is completed.
+  /// Iyzico: paymentGroup=LISTING, auth=true. Stripe: PaymentIntent capture_method=manual.
+  Future<PaymentResult<String>> authorizeOnly({
+    required String cardTokenId,
+    required double amount,
+    required String currency,
+    String? customerId,
+  });
+
   /// Processes payment for a booking. For completed bookings use [distributeFunds] to split platform/driver.
   Future<PaymentResult<String>> processPayment({
     required String cardTokenId,

@@ -16,6 +16,7 @@ class StripePaymentService implements PaymentService {
   static const _rpcProcessPayment = 'payment_process';
   static const _rpcAddCard = 'payment_add_card';
   static const _rpcDistributeFunds = 'payment_distribute_funds';
+  static const _rpcAuthorize = 'payment_authorize';
 
   @override
   Future<PaymentResult<CardToken>> addCard({
@@ -50,6 +51,43 @@ class StripePaymentService implements PaymentService {
       return PaymentFailure(
         e.toString(),
         code: 'add_card_error',
+      );
+    }
+  }
+
+  @override
+  Future<PaymentResult<String>> authorizeOnly({
+    required String cardTokenId,
+    required double amount,
+    required String currency,
+    String? customerId,
+  }) async {
+    try {
+      final res = await _client.rpc(
+        _rpcAuthorize,
+        params: {
+          'p_card_token_id': cardTokenId,
+          'p_amount': amount,
+          'p_currency': currency,
+          if (customerId != null) 'p_customer_id': customerId,
+        },
+      ) as Map<String, dynamic>?;
+
+      if (res == null || res['ok'] != true) {
+        return PaymentFailure(
+          res?['error'] as String? ?? 'Authorization failed',
+          code: res?['code'] as String?,
+        );
+      }
+      final id = res['payment_id'] as String? ?? res['payment_intent_id'] as String?;
+      if (id == null || id.isEmpty) {
+        return PaymentFailure('No payment_id returned', code: 'authorize_error');
+      }
+      return PaymentSuccess(id);
+    } catch (e) {
+      return PaymentFailure(
+        e.toString(),
+        code: 'authorize_error',
       );
     }
   }

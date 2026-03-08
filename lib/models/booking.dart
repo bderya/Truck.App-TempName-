@@ -13,6 +13,7 @@ class Booking {
     this.status = 'pending',
     this.damagePhotos,
     this.deliverySignatureUrl,
+    this.paymentId,
     this.endedAt,
     this.createdAt,
     this.updatedAt,
@@ -32,6 +33,8 @@ class Booking {
   final List<String>? damagePhotos;
   /// Customer signature image URL at delivery.
   final String? deliverySignatureUrl;
+  /// Pre-auth payment/intent id from gateway; capture when job is completed.
+  final String? paymentId;
   /// When the job was completed (delivery confirmed).
   final DateTime? endedAt;
   final DateTime? createdAt;
@@ -56,6 +59,7 @@ class Booking {
       status: json['status'] as String? ?? 'pending',
       damagePhotos: damagePhotos,
       deliverySignatureUrl: json['delivery_signature_url'] as String?,
+      paymentId: json['payment_id'] as String?,
       endedAt: json['ended_at'] != null
           ? DateTime.parse(json['ended_at'] as String)
           : null,
@@ -81,6 +85,7 @@ class Booking {
         'status': status,
         if (damagePhotos != null) 'damage_photos': damagePhotos,
         if (deliverySignatureUrl != null) 'delivery_signature_url': deliverySignatureUrl,
+        if (paymentId != null) 'payment_id': paymentId,
         if (endedAt != null) 'ended_at': endedAt!.toIso8601String(),
         if (createdAt != null) 'created_at': createdAt!.toIso8601String(),
         if (updatedAt != null) 'updated_at': updatedAt!.toIso8601String(),
@@ -99,6 +104,7 @@ class Booking {
     String? status,
     List<String>? damagePhotos,
     String? deliverySignatureUrl,
+    String? paymentId,
     DateTime? endedAt,
     DateTime? createdAt,
     DateTime? updatedAt,
@@ -117,6 +123,7 @@ class Booking {
         status: status ?? this.status,
         damagePhotos: damagePhotos ?? this.damagePhotos,
         deliverySignatureUrl: deliverySignatureUrl ?? this.deliverySignatureUrl,
+        paymentId: paymentId ?? this.paymentId,
         endedAt: endedAt ?? this.endedAt,
         createdAt: createdAt ?? this.createdAt,
         updatedAt: updatedAt ?? this.updatedAt,

@@ -1,11 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/constants.dart';
 import '../../models/models.dart';
+import '../../services/payment/payment_types.dart';
+import '../auth/providers/auth_state_provider.dart';
+import '../auth/widgets/lazy_auth_bottom_sheet.dart';
 import 'route_helper.dart';
+import 'widgets/add_card_sheet.dart';
 
 /// Vehicle type for UI: Car = standard, Bike = motorcycle, Truck = heavy.
 const _vehicleOptions = [
@@ -14,33 +19,88 @@ const _vehicleOptions = [
   ('truck', 'heavy', Icons.local_shipping_rounded),
 ];
 
-class BookingConfirmationScreen extends StatefulWidget {
+class BookingConfirmationScreen extends ConsumerStatefulWidget {
   const BookingConfirmationScreen({
     super.key,
     required this.userLocation,
     required this.destinationLocation,
     this.pickupAddress = 'Pickup',
     this.destinationAddress = 'Destination',
-    this.clientId = 1,
+    this.clientId,
   });
 
   final LatLng userLocation;
   final LatLng destinationLocation;
   final String pickupAddress;
   final String destinationAddress;
-  final int clientId;
+  final int? clientId;
 
   @override
-  State<BookingConfirmationScreen> createState() => _BookingConfirmationScreenState();
+  ConsumerState<BookingConfirmationScreen> createState() => _BookingConfirmationScreenState();
 }
 
-class _BookingConfirmationScreenState extends State<BookingConfirmationScreen> {
+class _BookingConfirmationScreenState extends ConsumerState<BookingConfirmationScreen> {
   List<LatLng> _routePoints = [];
   bool _routeLoading = true;
   int _selectedIndex = 0;
   bool _isMatching = false;
 
   String get _vehicleType => _vehicleOptions[_selectedIndex].$2;
+
+  /// Resolves client, ensures saved card, runs pre-auth, then creates booking with payment_id.
+  Future<void> _onRequestTow() async {
+    int? clientId = widget.clientId;
+    User? currentUser = ref.read(currentAppUserProvider).valueOrNull;
+    if (currentUser != null && currentUser.userType == 'client') {
+      clientId = currentUser.id;
+    }
+    if (clientId == null) {
+      final user = await showLazyAuthBottomSheet(context);
+      if (user != null) {
+        ref.invalidate(authStatusProvider);
+        clientId = user.id;
+        currentUser = user;
+      }
+    }
+    if (clientId == null) return;
+
+    currentUser = ref.read(currentAppUserProvider).valueOrNull ?? currentUser;
+    if (currentUser == null) {
+      final u = await ref.read(currentAppUserProvider.future);
+      currentUser = u;
+    }
+
+    String? cardTokenId = currentUser?.defaultCardTokenId;
+    if (cardTokenId == null || cardTokenId.isEmpty) {
+      final added = await showAddCardSheet(context, userId: clientId);
+      if (!added || !mounted) return;
+      final updated = await ref.read(currentAppUserProvider.future);
+      cardTokenId = updated?.defaultCardTokenId;
+    }
+    if (cardTokenId == null || cardTokenId.isEmpty) return;
+
+    final authResult = await ref.read(paymentServiceProvider).authorizeOnly(
+          cardTokenId: cardTokenId,
+          amount: _price,
+          currency: 'TRY',
+          customerId: clientId.toString(),
+        );
+
+    if (authResult is PaymentFailure) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(authResult.reason),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
+      }
+      return;
+    }
+
+    final paymentId = (authResult as PaymentSuccess<String>).data;
+    if (mounted) _startMatching(clientId, paymentId: paymentId);
+  }
 
   @override
   void initState() {
@@ -76,14 +136,14 @@ class _BookingConfirmationScreenState extends State<BookingConfirmationScreen> {
     return (base + (_distanceKm * rate)) * mult;
   }
 
-  Future<void> _startMatching() async {
+  Future<void> _startMatching(int clientId, {String? paymentId}) async {
     setState(() => _isMatching = true);
 
     try {
       final res = await Supabase.instance.client
           .from('bookings')
           .insert({
-            'client_id': widget.clientId,
+            'client_id': clientId,
             'pickup_address': widget.pickupAddress,
             'destination_address': widget.destinationAddress,
             'pickup_lat': widget.userLocation.latitude,
@@ -91,6 +151,7 @@ class _BookingConfirmationScreenState extends State<BookingConfirmationScreen> {
             'price': _price,
             'vehicle_type_requested': _vehicleType,
             'status': 'pending',
+            if (paymentId != null && paymentId.isNotEmpty) 'payment_id': paymentId,
           })
           .select()
           .single();
@@ -330,7 +391,7 @@ class _BookingConfirmationScreenState extends State<BookingConfirmationScreen> {
                   ),
                   const SizedBox(height: 24),
                   FilledButton(
-                    onPressed: _isMatching ? null : _startMatching,
+                    onPressed: _isMatching ? null : _onRequestTow,
                     style: FilledButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 18),
                       shape: RoundedRectangleBorder(

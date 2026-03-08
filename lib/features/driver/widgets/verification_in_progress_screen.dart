@@ -35,7 +35,7 @@ class VerificationInProgressScreen extends StatelessWidget {
                 ),
                 const SizedBox(height: 24),
                 Text(
-                  isRejected ? 'Verification Rejected' : 'Verification in Progress',
+                  isRejected ? 'Verification Rejected' : 'Under Review',
                   style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                         fontWeight: FontWeight.bold,
                       ),
@@ -45,7 +45,7 @@ class VerificationInProgressScreen extends StatelessWidget {
                 Text(
                   isRejected
                       ? 'Your driver account could not be approved. Please contact support if you believe this is an error.'
-                      : 'Your documents are under review. You will be notified when your account is approved and can access the job map.',
+                      : 'Your documents are under review. You cannot access the job map until an admin approves your account.',
                   style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                         color: Theme.of(context)
                             .colorScheme

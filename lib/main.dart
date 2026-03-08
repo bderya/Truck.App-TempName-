@@ -3,8 +3,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'core/providers.dart';
 import 'admin_app.dart';
 import 'features/admin/admin_approval_screen.dart';
+import 'features/auth/providers/auth_state_provider.dart';
+import 'features/auth/screens/auth_gate.dart';
 import 'features/driver/driver_home_screen.dart';
 import 'features/map/map_view_screen.dart';
 
@@ -35,7 +38,7 @@ class _MobileApp extends ConsumerWidget {
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.orange),
         useMaterial3: true,
       ),
-      home: const _AppSwitcher(),
+      home: const AuthGate(authenticatedChild: _AppSwitcher()),
     );
   }
 }
@@ -98,6 +101,15 @@ class _AppSwitcher extends ConsumerWidget {
               ),
               icon: const Icon(Icons.admin_panel_settings),
               label: const Text('Admin – Approval'),
+            ),
+            const SizedBox(height: 32),
+            TextButton.icon(
+              onPressed: () async {
+                await ref.read(authServiceProvider).signOut();
+                ref.invalidate(authStatusProvider);
+              },
+              icon: const Icon(Icons.logout),
+              label: const Text('Sign out'),
             ),
           ],
         ),

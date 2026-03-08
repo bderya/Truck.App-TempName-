@@ -6,6 +6,8 @@ class User {
     required this.fullName,
     required this.userType,
     this.avatarUrl,
+    this.email,
+    this.defaultCardTokenId,
     this.isVerified = false,
     this.status = 'pending',
     this.licenseImageUrl,
@@ -19,6 +21,9 @@ class User {
   final String fullName;
   final String userType; // 'client' | 'driver'
   final String? avatarUrl;
+  final String? email;
+  /// Saved payment method token ID (gateway); no raw card stored.
+  final String? defaultCardTokenId;
   final bool isVerified;
   final String status; // 'pending' | 'approved' | 'rejected'
   final String? licenseImageUrl;
@@ -32,6 +37,8 @@ class User {
         fullName: json['full_name'] as String,
         userType: json['user_type'] as String,
         avatarUrl: json['avatar_url'] as String?,
+        email: json['email'] as String?,
+        defaultCardTokenId: json['default_card_token_id'] as String?,
         isVerified: json['is_verified'] as bool? ?? false,
         status: json['status'] as String? ?? 'pending',
         licenseImageUrl: json['license_image_url'] as String?,
@@ -50,6 +57,8 @@ class User {
         'full_name': fullName,
         'user_type': userType,
         if (avatarUrl != null) 'avatar_url': avatarUrl,
+        if (email != null) 'email': email,
+        if (defaultCardTokenId != null) 'default_card_token_id': defaultCardTokenId,
         'is_verified': isVerified,
         'status': status,
         if (licenseImageUrl != null) 'license_image_url': licenseImageUrl,
@@ -64,6 +73,8 @@ class User {
     String? fullName,
     String? userType,
     String? avatarUrl,
+    String? email,
+    String? defaultCardTokenId,
     bool? isVerified,
     String? status,
     String? licenseImageUrl,
@@ -77,6 +88,8 @@ class User {
         fullName: fullName ?? this.fullName,
         userType: userType ?? this.userType,
         avatarUrl: avatarUrl ?? this.avatarUrl,
+        email: email ?? this.email,
+        defaultCardTokenId: defaultCardTokenId ?? this.defaultCardTokenId,
         isVerified: isVerified ?? this.isVerified,
         status: status ?? this.status,
         licenseImageUrl: licenseImageUrl ?? this.licenseImageUrl,
