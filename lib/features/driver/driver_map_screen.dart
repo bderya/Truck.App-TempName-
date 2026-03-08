@@ -269,6 +269,7 @@ class _DriverMapScreenState extends ConsumerState<DriverMapScreen> {
             JobRequestOverlay(
               booking: pendingJob.booking,
               pickupDistanceKm: pendingJob.pickupDistanceKm,
+              isAdminAssigned: pendingJob.isAdminAssigned,
               onAccept: () => _onAccept(context, ref, pendingJob),
               onDecline: () => _onDecline(ref),
             ),
@@ -282,8 +283,10 @@ class _DriverMapScreenState extends ConsumerState<DriverMapScreen> {
     WidgetRef ref,
     PendingJobRequest pendingJob,
   ) async {
-    final success =
-        await ref.read(driverBookingProvider.notifier).acceptJob();
+    final notifier = ref.read(driverBookingProvider.notifier);
+    final success = pendingJob.isAdminAssigned
+        ? await notifier.confirmAdminAssignedJob()
+        : await notifier.acceptJob();
 
     if (!context.mounted) return;
     if (success) {

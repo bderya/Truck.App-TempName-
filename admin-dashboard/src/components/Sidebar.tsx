@@ -8,8 +8,9 @@ const nav = [
   { href: "/", label: "Dashboard" },
   { href: "/map", label: "Canlı Harita" },
   { href: "/drivers", label: "Bekleyen Sürücüler" },
-  { href: "/financials", label: "Finansal Özet" },
   { href: "/bookings", label: "Aktif Rezervasyonlar" },
+  { href: "/reviews", label: "Değerlendirmeler" },
+  { href: "/financials", label: "Finansal Özet" },
 ];
 
 export default function Sidebar() {

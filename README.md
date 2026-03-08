@@ -1,77 +1,120 @@
-# Cekici - Tow Truck On-Demand App
+# Cekici – Tow Truck On-Demand
 
-Uber-style tow truck booking app built with Flutter.
+Uber-style tow truck booking: **Client app** (request tow, track driver, pay), **Driver app** (receive jobs, navigate, complete with proof of work), and **Admin** (Flutter Web + Next.js dashboard) on a single Supabase backend.
+
+---
+
+## Tech stack
+
+- **Flutter** – Client & Driver mobile apps; Flutter Web for a lightweight admin UI
+- **Next.js** (Tailwind) – Admin dashboard (live map, drivers, bookings, reviews, financials)
+- **Supabase** – PostgreSQL, Auth (phone OTP), Realtime, Storage, Edge Functions
+- **Maps** – flutter_map (OSRM/OpenStreetMap), react-leaflet (admin)
+- **Payments** – Stripe/Iyzico (tokenization, pre-auth, capture, split; tips 100% to driver)
+
+---
 
 ## Setup
 
-1. **Install Flutter** (if not already): https://docs.flutter.dev/get-started/install
+### 1. Flutter
 
-2. **Generate platform files** (if needed – run once to create Gradle wrapper, iOS project, etc.):
-   ```bash
-   flutter create . --project-name cekici --org com.cekici
-   ```
-   Flutter will add any missing platform files without overwriting your `lib/` or `pubspec.yaml`.
+- Install [Flutter](https://docs.flutter.dev/get-started/install).
+- Generate platform files if needed:
+  ```bash
+  flutter create . --project-name cekici --org com.cekici
+  ```
+- Get dependencies:
+  ```bash
+  flutter pub get
+  ```
 
-3. **Get dependencies:**
-   ```bash
-   flutter pub get
-   ```
+### 2. Supabase
 
-4. **Configure Supabase** – Update `lib/main.dart` with your Supabase URL and anon key.
+- Create a project at [supabase.com](https://supabase.com).
+- Run migrations in order (see `supabase/migrations/`).
+- In the Flutter app, configure Supabase URL and anon key (e.g. in `lib/core/supabase_service.dart` or env).
 
-5. **Run the app:**
-   ```bash
-   flutter run
-   ```
+### 3. Run
 
-## Flutter Web Admin Dashboard
+- **Mobile (Client / Driver):** `flutter run` (choose device). On first launch you pick Customer or Driver app.
+- **Flutter Web Admin:** `flutter run -d chrome` – opens the in-app admin (dark theme).
+- **Next.js Admin Dashboard:** From `admin-dashboard/`: `npm install` then `npm run dev`. Use for live map, driver approval, bookings, **Reviews**, financials, manual job assignment.
 
-On **web** (e.g. `flutter run -d chrome`), the app starts directly in the **Admin Dashboard** (dark theme, blue & gold).
+---
 
-- **Dashboard**: Earnings cards (Total Revenue, Platform Commission, Active Jobs) and a **Live Map** of active drivers (flutter_map, `is_available = true`).
-- **Drivers**: Table of all drivers; **Review Documents** (license/criminal record URLs) and a **toggle** to approve/reject (updates `is_verified` via RPC).
-- **Bookings**: Table of all bookings.
-- **Settings**: Placeholder.
+## Main features
 
-Ensure web is enabled: `flutter create . --platforms web` if needed.
+| Area | Description |
+|------|-------------|
+| **Booking** | Pickup/destination, vehicle type, price estimate, pre-auth payment, real-time driver search and assignment (or manual dispatch by admin). |
+| **Tracking** | Live driver position (background location), ETA, smooth marker animation; optional external navigation (Yandex/Google/Apple). |
+| **Payments** | Card tokenization, pre-authorize on request; capture + split (platform/driver) on completion; **tips** via Edge Function `process-tip` (100% to driver wallet). |
+| **Reviews & tipping** | Post-job summary: star rating, comment, tags; optional tip (presets or custom). Stored in `reviews`; driver `average_rating` updated by trigger. See `docs/CUSTOMER_FEEDBACK_AND_TIPPING.md`. |
+| **Driver wallet** | Balance and transaction list; withdrawal requests; credits from completed jobs and tips. |
+| **Driver verification** | Onboarding (documents, vehicle, payout); admin approval; `is_verified` gates job access. Quality score and weekly inspection (photos) can affect availability. |
+| **Manual dispatch** | Admin assigns a pending job to an online driver; driver sees “operator assigned” and confirms. See `docs/MANUAL_DISPATCH.md`. |
+| **i18n** | `easy_localization` with TR/EN; locale persisted. See `docs/I18N.md`. |
+| **Legal** | KVKK/EULA/sales agreement in `assets/legal/`; mandatory checkboxes at registration; consent version/date in DB. See `docs/LEGAL_CONSENT.md`. |
 
-## Project Structure (Clean Architecture)
+---
+
+## Project structure
 
 ```
 lib/
-├── core/           # Constants, theme, shared utilities
-├── features/       # Feature modules (auth, booking, map, etc.)
-├── models/         # Shared data models
-├── services/       # Supabase, Geolocator, Socket.io
-└── main.dart
+├── core/                 # Constants, theme, Supabase init, crash reporting
+├── features/
+│   ├── auth/             # Phone OTP, lazy registration, consent
+│   ├── booking/          # Map flow, confirmation, receipt, post-job summary (review + tip)
+│   ├── driver/           # Job overlay, wallet, onboarding, settings, shift toggle
+│   ├── tracking/         # Driver tracking screen, ETA
+│   ├── map/              # Customer map, vehicle selector, bottom sheet
+│   └── admin_dashboard/  # Flutter Web admin
+├── models/               # User, Booking, TowTruck, ReceiptData, WalletTransaction, etc.
+└── services/             # Auth, payment, receipt, review, complete job, location, etc.
+
+admin-dashboard/          # Next.js admin (drivers, bookings, reviews, financials, live map)
+supabase/
+├── migrations/           # Schema, RLS, triggers, RPCs (reviews, tips, wallet, etc.)
+└── functions/            # Edge Functions (e.g. process-tip, manual-assign-job, capture-payment)
+docs/                     # Feature docs (I18N, wallet, reviews & tipping, manual dispatch, etc.)
+assets/
+├── translations/         # tr-TR.json, en-US.json
+└── legal/                # kvkk.html, eula.html, sales_agreement.html
 ```
 
-## Driver verification & Admin approval
+---
 
-- **Driver app**: If the driver's user row has `is_verified = false`, they only see a "Verification in Progress" screen and cannot open the job map until an admin approves.
-- **Verification fields**: `users` has `is_verified`, `status` (pending/approved/rejected), `license_image_url`, `criminal_record_url`; `tow_trucks` has `plate_image_url`.
-- **Admin approval**: Run the migrations in `supabase/migrations/` then use either:
-  - **App**: Open "Admin – Approval" from the home screen, enter user ID and status (pending/approved/rejected), then Apply.
-  - **Supabase Dashboard SQL**: `SELECT approve_user(123, 'approved');` or `SELECT set_user_verified(123, true);`
+## Documentation
 
-## Payment service
+- [Customer feedback & tipping](docs/CUSTOMER_FEEDBACK_AND_TIPPING.md) – Reviews table, post-job screen, tips (100% to driver), admin Reviews tab
+- [Manual dispatch](docs/MANUAL_DISPATCH.md) – Admin assign job to driver, `assigned` status, driver confirm
+- [Legal consent](docs/LEGAL_CONSENT.md) – KVKK/EULA, registration checkboxes, consent version in DB
+- [I18n](docs/I18N.md) – easy_localization, locale detection, settings
+- [Driver wallet](docs/DRIVER_WALLET.md) – Balance, transactions, withdrawals
+- [Driver cancellation & penalty](docs/DRIVER_CANCELLATION_PENALTY.md) – Late cancel penalty, suspension
+- [Real-time tracking](docs/REALTIME_TRACKING_PRODUCTION.md) – Background location, smoothing, battery
+- [Error handling & crash reporting](docs/ERROR_HANDLING.md), [CRASH_REPORTING.md](docs/CRASH_REPORTING.md)
 
-The app includes a **Payment Service** (Stripe/marketplace-style) with tokenization only (no raw card data stored):
+---
 
-- **addCard(gatewayTokenOrPaymentMethodId)** – Store a token from your gateway (e.g. Stripe Elements); returns a [CardToken].
-- **processPayment(...)** – Charge a card token for a booking.
-- **distributeFunds(...)** – Split payment when a booking is completed: X% platform, Y% driver (uses `AppConstants.platformCommissionRate`).
+## Payment integration
 
-**Security:** Only token IDs are sent to your backend; implement the actual charge in Supabase Edge Functions or your API using Stripe Connect / Iyzico.
+- **Stripe/Iyzico**: Tokenize cards only; no raw card data in app. Pre-authorize on “Request tow”; capture + split on job completion (Edge Function / RPC).
+- **Tips**: Edge Function `process-tip` charges the client card then calls RPC `credit_driver_tip`; 100% goes to driver wallet. Set `STRIPE_SECRET_KEY` in Supabase for production.
+- Run `supabase/migrations/20250110000000_payment_rpc_stubs.sql` and replace RPC bodies with your gateway logic where needed.
 
-**Failure handling:** Use `handlePaymentResult()` or `processBookingPaymentAndNotify()` from `payment_notification_helper.dart` to show a snackbar on failure (e.g. insufficient funds, card declined).
+---
 
-Database stubs: run the migration in `supabase/migrations/20250110000000_payment_rpc_stubs.sql`, then replace the RPC bodies with your gateway logic.
+## Dependencies (Flutter)
 
-## Dependencies
+- **supabase_flutter** – Backend, auth, realtime, storage  
+- **flutter_riverpod** – State management  
+- **flutter_map** + **latlong2** – Maps (OSRM tiles)  
+- **geolocator** – Location; **flutter_background_geolocation** (mobile) for driver background updates  
+- **easy_localization** – i18n  
+- **webview_flutter** – Legal documents  
+- **pdf** / **printing** – Receipt PDF  
+- **sentry_flutter** / **firebase_crashlytics** – Crash reporting  
 
-- **supabase_flutter** – Backend & auth
-- **flutter_riverpod** – State management
-- **latlong2** + **flutter_map** – Cost-effective maps (OpenStreetMap)
-- **geolocator** – Location services
-- **socket_io_client** – Real-time updates
+See `pubspec.yaml` for full list.

@@ -6,14 +6,17 @@ import '../../../core/providers.dart';
 import '../../../models/models.dart';
 
 /// Pending job request shown to the driver (booking + pickup distance).
+/// [isAdminAssigned] true when status is 'assigned' (operator assigned this job to this driver).
 class PendingJobRequest {
   const PendingJobRequest({
     required this.booking,
     required this.pickupDistanceKm,
+    this.isAdminAssigned = false,
   });
 
   final Booking booking;
   final double pickupDistanceKm;
+  final bool isAdminAssigned;
 }
 
 /// Provider that listens for new pending bookings and exposes them to nearby drivers.
@@ -75,13 +78,38 @@ class DriverBookingNotifier extends StateNotifier<PendingJobRequest?> {
   }
 
   /// Re-opened after driver cancel: status → pending, is_priority_rematch = true.
+  /// Admin assign: status → assigned, driver_id = me → show admin-assigned UI.
   Future<void> _onBookingUpdate(PostgresChangePayload payload) async {
     final record = payload.newRecord;
     if (record == null) return;
     final status = record['status'] as String?;
+    final driverIdRaw = record['driver_id'];
+    final assignedDriverId = driverIdRaw != null ? (driverIdRaw is int ? driverIdRaw : int.tryParse(driverIdRaw.toString())) : null;
+
+    if (status == 'assigned' && assignedDriverId == driverId) {
+      await _showAdminAssignedJob(record);
+      return;
+    }
+
     final isPriorityRematch = record['is_priority_rematch'] as bool? ?? false;
     if (status != 'pending' || !isPriorityRematch) return;
     await _onBookingInsert(payload);
+  }
+
+  Future<void> _showAdminAssignedJob(Map<String, dynamic> record) async {
+    final pickupLat = (record['pickup_lat'] as num?)?.toDouble();
+    final pickupLng = (record['pickup_lng'] as num?)?.toDouble();
+    if (pickupLat == null || pickupLng == null) return;
+    final position = await locationService.getCurrentPosition();
+    if (position == null) return;
+    const distance = Distance();
+    final meters = distance(
+      LatLng(position.latitude, position.longitude),
+      LatLng(pickupLat, pickupLng),
+    );
+    final km = meters / 1000;
+    final booking = Booking.fromJson(record);
+    state = PendingJobRequest(booking: booking, pickupDistanceKm: km, isAdminAssigned: true);
   }
 
   Future<void> _onBookingInsert(PostgresChangePayload payload) async {
@@ -152,6 +180,30 @@ class DriverBookingNotifier extends StateNotifier<PendingJobRequest?> {
 
   void declineJob() {
     state = null;
+  }
+
+  /// Confirms an admin-assigned job (status assigned → accepted). Returns true on success.
+  Future<bool> confirmAdminAssignedJob() async {
+    final current = state;
+    final id = driverId;
+    if (current == null || id == null || !current.isAdminAssigned) return false;
+
+    try {
+      final res = await supabase.rpc(
+        'confirm_admin_assigned_booking',
+        params: {
+          'p_booking_id': current.booking.id,
+          'p_driver_id': id,
+        },
+      );
+      state = null;
+      final map = res as Map<String, dynamic>?;
+      final ok = map?['ok'] as bool?;
+      return ok == true;
+    } catch (_) {
+      state = null;
+      return false;
+    }
   }
 
   @override

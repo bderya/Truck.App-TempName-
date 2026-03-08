@@ -8,7 +8,7 @@ import '../../../core/constants.dart';
 import '../../../models/models.dart';
 
 /// Overlay shown when a new pending booking is detected (Supabase Realtime or Socket.io).
-/// Includes 30s countdown, estimated earning, pickup distance, vehicle info, and alert sound.
+/// When [isAdminAssigned] is true, shows "You have been assigned this job by the operator" and a single "Start job" button (no countdown/decline).
 class JobRequestOverlay extends StatefulWidget {
   const JobRequestOverlay({
     super.key,
@@ -17,6 +17,7 @@ class JobRequestOverlay extends StatefulWidget {
     required this.onAccept,
     required this.onDecline,
     this.countdownSeconds = 30,
+    this.isAdminAssigned = false,
   });
 
   final Booking booking;
@@ -24,6 +25,7 @@ class JobRequestOverlay extends StatefulWidget {
   final VoidCallback onAccept;
   final VoidCallback onDecline;
   final int countdownSeconds;
+  final bool isAdminAssigned;
 
   @override
   State<JobRequestOverlay> createState() => _JobRequestOverlayState();
@@ -52,8 +54,10 @@ class _JobRequestOverlayState extends State<JobRequestOverlay> {
   void initState() {
     super.initState();
     _remainingSeconds = widget.countdownSeconds;
-    _startCountdown();
-    _playAlertSound();
+    if (!widget.isAdminAssigned) {
+      _startCountdown();
+      _playAlertSound();
+    }
   }
 
   void _startCountdown() {
@@ -142,11 +146,31 @@ class _JobRequestOverlayState extends State<JobRequestOverlay> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
+                    if (widget.isAdminAssigned)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 16),
+                        child: Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                          decoration: BoxDecoration(
+                            color: Theme.of(context).colorScheme.primaryContainer.withValues(alpha: 0.5),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Text(
+                            'Operatör tarafından size bu iş atandı.',
+                            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                                  fontWeight: FontWeight.w600,
+                                  color: Theme.of(context).colorScheme.onPrimaryContainer,
+                                ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                      ),
                     Row(
                       children: [
                         Expanded(
                           child: Text(
-                            'new_job_request'.tr(),
+                            widget.isAdminAssigned ? 'Atanan iş' : 'new_job_request'.tr(),
                             style: Theme.of(context).textTheme.titleLarge?.copyWith(
                                   fontWeight: FontWeight.bold,
                                 ),
@@ -189,38 +213,40 @@ class _JobRequestOverlayState extends State<JobRequestOverlay> {
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        SizedBox(
-                          width: 72,
-                          height: 72,
-                          child: Stack(
-                            alignment: Alignment.center,
-                            children: [
-                              SizedBox(
-                                width: 72,
-                                height: 72,
-                                child: CircularProgressIndicator(
-                                  value: _remainingSeconds / widget.countdownSeconds,
-                                  strokeWidth: 6,
-                                  backgroundColor: Theme.of(context)
-                                      .colorScheme
-                                      .surfaceContainerHighest,
-                                  valueColor: AlwaysStoppedAnimation<Color>(
-                                    _remainingSeconds <= 10
-                                        ? Theme.of(context).colorScheme.error
-                                        : Theme.of(context).colorScheme.primary,
+                        if (!widget.isAdminAssigned) ...[
+                          SizedBox(
+                            width: 72,
+                            height: 72,
+                            child: Stack(
+                              alignment: Alignment.center,
+                              children: [
+                                SizedBox(
+                                  width: 72,
+                                  height: 72,
+                                  child: CircularProgressIndicator(
+                                    value: _remainingSeconds / widget.countdownSeconds,
+                                    strokeWidth: 6,
+                                    backgroundColor: Theme.of(context)
+                                        .colorScheme
+                                        .surfaceContainerHighest,
+                                    valueColor: AlwaysStoppedAnimation<Color>(
+                                      _remainingSeconds <= 10
+                                          ? Theme.of(context).colorScheme.error
+                                          : Theme.of(context).colorScheme.primary,
+                                    ),
                                   ),
                                 ),
-                              ),
-                              Text(
-                                '$_remainingSeconds',
-                                style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                              ),
-                            ],
+                                Text(
+                                  '$_remainingSeconds',
+                                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                ),
+                              ],
+                            ),
                           ),
-                        ),
-                        const SizedBox(width: 20),
+                          const SizedBox(width: 20),
+                        ],
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -314,26 +340,28 @@ class _JobRequestOverlayState extends State<JobRequestOverlay> {
                     const SizedBox(height: 24),
                     Row(
                       children: [
-                        Expanded(
-                          child: OutlinedButton.icon(
-                            onPressed: _onDecline,
-                            icon: const Icon(Icons.close),
-                            label: Text('decline'.tr()),
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: Theme.of(context).colorScheme.error,
-                              side: BorderSide(
-                                color: Theme.of(context).colorScheme.error,
+                        if (!widget.isAdminAssigned) ...[
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: _onDecline,
+                              icon: const Icon(Icons.close),
+                              label: Text('decline'.tr()),
+                              style: OutlinedButton.styleFrom(
+                                foregroundColor: Theme.of(context).colorScheme.error,
+                                side: BorderSide(
+                                  color: Theme.of(context).colorScheme.error,
+                                ),
+                                padding: const EdgeInsets.symmetric(vertical: 14),
                               ),
-                              padding: const EdgeInsets.symmetric(vertical: 14),
                             ),
                           ),
-                        ),
-                        const SizedBox(width: 12),
+                          const SizedBox(width: 12),
+                        ],
                         Expanded(
                           child: FilledButton.icon(
                             onPressed: _onAccept,
                             icon: const Icon(Icons.check),
-                            label: Text('accept'.tr()),
+                            label: Text(widget.isAdminAssigned ? 'İşe başla' : 'accept'.tr()),
                             style: FilledButton.styleFrom(
                               padding: const EdgeInsets.symmetric(vertical: 14),
                             ),

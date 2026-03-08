@@ -15,7 +15,7 @@ class WalletTransaction {
   final int walletId;
   /// Positive = credit (e.g. booking_credit), negative = debit (withdrawal).
   final double amount;
-  final String type; // booking_credit, withdrawal, withdrawal_fee, adjustment
+  final String type; // booking_credit, tip, withdrawal, withdrawal_fee, adjustment
   final String status; // completed, pending_admin_approval, rejected, cancelled
   final int? referenceId;
   final String? description;

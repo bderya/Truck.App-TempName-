@@ -12,7 +12,7 @@ import '../../core/providers.dart';
 import '../../models/models.dart';
 import '../../services/eta_service.dart';
 import '../booking/screens/job_summary_receipt_screen.dart';
-import '../booking/widgets/review_popup.dart';
+import '../booking/screens/post_job_summary_screen.dart';
 import '../chat/chat_screen.dart';
 
 /// Client screen: real-time driver tracking with smooth animated marker and ETA.
@@ -65,30 +65,21 @@ class _DriverTrackingScreenState extends ConsumerState<DriverTrackingScreen> {
       if (booking.status == 'completed') {
         _reviewShown = true;
         final completedBooking = booking;
-        ReviewPopup.show(
-          context,
-          driverName: null,
-          onSubmit: (rating) async {
-            if (rating > 0 && completedBooking.driverId != null) {
-              try {
-                await ref.read(supabaseClientProvider).from('driver_ratings').insert({
-                  'booking_id': completedBooking.id,
-                  'driver_id': completedBooking.driverId,
-                  'score': rating,
-                });
-              } catch (_) {}
-            }
-            if (mounted) _openReceipt(completedBooking.id);
-          },
-          onDismiss: () => _openReceipt(completedBooking.id),
+        if (!mounted) return;
+        Navigator.of(context).push(
+          MaterialPageRoute<void>(
+            builder: (_) => PostJobSummaryScreen(
+              booking: completedBooking,
+              driverName: null,
+            ),
+          ),
         );
       }
     });
   }
 
   void _openReceipt(int bookingId) {
-    Navigator.of(context).pop();
-    Navigator.of(context).push(
+    Navigator.of(context).pushReplacement(
       MaterialPageRoute<void>(
         builder: (_) => JobSummaryReceiptScreen(bookingId: bookingId),
       ),

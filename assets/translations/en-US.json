@@ -154,5 +154,27 @@
   "location_rationale_why": "Why we need \"Always Allow\"",
   "location_rationale_bullets": "• During an active job, the customer can track your drive on the map.\n\n• Your location can be sent even when the app is in the background or screen is off.\n\n• Your location is only used for the duration of the job.",
   "location_rationale_hint": "Please select \"Always Allow\" or \"Always\" on the system permission screen.",
-  "understand_and_allow": "Understand and allow"
+  "understand_and_allow": "Understand and allow",
+
+  "rate_experience_title": "Rate your experience",
+  "rate_experience_thanks": "Thank you for using Cekici.",
+  "rate_experience_with_driver": "How was your experience with {driver}?",
+  "rate_stars_label": "Rate your experience",
+  "comment_optional": "Comment (optional)",
+  "comment_hint": "Write a short review...",
+  "tags_label": "Tags",
+  "send_tip_label": "Send tip (optional)",
+  "tip_disclaimer": "100% of the tip goes to the driver; no platform commission.",
+  "tip_amount_label": "Tip amount",
+  "tip_custom": "Other",
+  "submit_and_receipt": "Submit and view receipt",
+  "skip": "Skip",
+  "tip_sent": "Tip sent",
+  "tip_failed": "Failed to send tip",
+  "tip_need_card": "A saved card is required for tipping. Add a payment method first.",
+  "tag_on_time": "On time",
+  "tag_professional": "Professional",
+  "tag_clean_truck": "Clean truck",
+  "tag_friendly": "Friendly",
+  "tag_issue": "Issue"
 }

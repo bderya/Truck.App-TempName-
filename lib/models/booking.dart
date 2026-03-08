@@ -32,6 +32,7 @@ class Booking {
     this.estimatedArrivalAt,
     this.driverStartedAt,
     this.isPriorityRematch = false,
+    this.tipAmount,
   });
 
   final int id;
@@ -43,7 +44,7 @@ class Booking {
   final double pickupLng;
   final double? price;
   final String vehicleTypeRequested; // 'standard' | 'heavy' | 'motorcycle'
-  final String status; // 'pending' | 'accepted' | 'on_the_way' | 'picked_up' | 'completed' | 'cancelled'
+  final String status; // 'pending' | 'assigned' | 'accepted' | 'on_the_way' | 'picked_up' | 'completed' | 'cancelled'
   /// Pre-pickup damage photo URLs (4 required for proof of work).
   final List<String>? damagePhotos;
   /// Customer signature image URL at delivery.
@@ -81,6 +82,8 @@ class Booking {
   final DateTime? driverStartedAt;
   /// True when re-opened after driver cancel; high priority for other drivers.
   final bool isPriorityRematch;
+  /// Optional tip paid by client (100% to driver).
+  final double? tipAmount;
 
   factory Booking.fromJson(Map<String, dynamic> json) {
     final damagePhotosRaw = json['damage_photos'];
@@ -128,6 +131,7 @@ class Booking {
       estimatedArrivalAt: json['estimated_arrival_at'] != null ? DateTime.parse(json['estimated_arrival_at'] as String) : null,
       driverStartedAt: json['driver_started_at'] != null ? DateTime.parse(json['driver_started_at'] as String) : null,
       isPriorityRematch: json['is_priority_rematch'] as bool? ?? false,
+      tipAmount: (json['tip_amount'] as num?)?.toDouble(),
     );
   }
 
@@ -163,6 +167,7 @@ class Booking {
         if (estimatedArrivalAt != null) 'estimated_arrival_at': estimatedArrivalAt!.toIso8601String(),
         if (driverStartedAt != null) 'driver_started_at': driverStartedAt!.toIso8601String(),
         'is_priority_rematch': isPriorityRematch,
+        if (tipAmount != null) 'tip_amount': tipAmount,
       };
 
   Booking copyWith({
@@ -197,6 +202,7 @@ class Booking {
     DateTime? estimatedArrivalAt,
     DateTime? driverStartedAt,
     bool? isPriorityRematch,
+    double? tipAmount,
   }) =>
       Booking(
         id: id ?? this.id,
@@ -231,6 +237,7 @@ class Booking {
         estimatedArrivalAt: estimatedArrivalAt ?? this.estimatedArrivalAt,
         driverStartedAt: driverStartedAt ?? this.driverStartedAt,
         isPriorityRematch: isPriorityRematch ?? this.isPriorityRematch,
+        tipAmount: tipAmount ?? this.tipAmount,
       );
 
   @override

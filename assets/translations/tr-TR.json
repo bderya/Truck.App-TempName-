@@ -154,5 +154,27 @@
   "location_rationale_why": "Neden \"Her Zaman İzin Ver\" istiyoruz?",
   "location_rationale_bullets": "• Aktif çekici göreviniz sırasında müşteri, sürüşünüzü haritada canlı takip edebilir.\n\n• Uygulama arka plandayken veya ekran kapalıyken bile konumunuz iletilebilir; böylece müşteri sizi kaybetmez.\n\n• Konumunuz yalnızca görev süresince kullanılır ve yalnızca bu hizmeti sunmak için gereklidir.",
   "location_rationale_hint": "Lütfen sistem izin ekranında \"Her Zaman İzin Ver\" veya \"Her zaman\"ı seçin.",
-  "understand_and_allow": "Anla ve İzin Ver"
+  "understand_and_allow": "Anla ve İzin Ver",
+
+  "rate_experience_title": "Deneyiminizi değerlendirin",
+  "rate_experience_thanks": "Cekici kullandığınız için teşekkürler.",
+  "rate_experience_with_driver": "{driver} ile deneyiminiz nasıldı?",
+  "rate_stars_label": "Deneyiminizi puanlayın",
+  "comment_optional": "Yorum (isteğe bağlı)",
+  "comment_hint": "Deneyiminizi kısaca yazın...",
+  "tags_label": "Etiketler",
+  "send_tip_label": "Bahşiş gönder (isteğe bağlı)",
+  "tip_disclaimer": "Tüm bahşiş sürücüye gider; platform komisyonu alınmaz.",
+  "tip_amount_label": "Bahşiş tutarı",
+  "tip_custom": "Diğer",
+  "submit_and_receipt": "Gönder ve makbuzu görüntüle",
+  "skip": "Atla",
+  "tip_sent": "Bahşiş gönderildi",
+  "tip_failed": "Bahşiş gönderilemedi",
+  "tip_need_card": "Bahşiş için kayıtlı kart gerekli. Önce ödeme yöntemi ekleyin.",
+  "tag_on_time": "Zamanında",
+  "tag_professional": "Profesyonel",
+  "tag_clean_truck": "Temiz araç",
+  "tag_friendly": "Samimi",
+  "tag_issue": "Sorun yaşandı"
 }

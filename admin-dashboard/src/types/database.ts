@@ -2,6 +2,7 @@ export type UserType = "client" | "driver";
 export type VerificationStatus = "pending" | "approved" | "rejected";
 export type BookingStatus =
   | "pending"
+  | "assigned"
   | "accepted"
   | "on_the_way"
   | "picked_up"
