@@ -4,10 +4,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
+import 'package:url_launcher/url_launcher.dart';
 
+import '../../core/error_messages_tr.dart';
+import '../../core/providers.dart';
 import '../../models/models.dart';
-import '../../services/driver_tracking_service.dart';
 import '../booking/booking_confirmation_screen.dart';
+import '../booking/screens/payment_methods_screen.dart';
 import '../tracking/driver_tracking_screen.dart';
 import 'providers/map_providers.dart';
 import 'widgets/booking_bottom_sheet.dart';
@@ -21,18 +24,24 @@ class MapViewScreen extends ConsumerStatefulWidget {
 
 class _MapViewScreenState extends ConsumerState<MapViewScreen> {
   final MapController _mapController = MapController();
-  final DriverTrackingService _trackingService = DriverTrackingService();
+  late final DriverTrackingService _trackingService;
   LatLng? _userLocation;
   List<TowTruck> _towTrucks = [];
   bool _isLoadingTrucks = false;
   String? _error;
   StreamSubscription<Booking?>? _bookingSubscription;
+  /// When non-null, we are waiting for a driver to accept; show "Searching..." overlay.
+  Booking? _searchingBooking;
+  Timer? _searchTimeoutTimer;
+  static const Duration _driverSearchTimeout = Duration(seconds: 120);
+  static const String _supportPhone = '+908501234567';
 
   static const LatLng _defaultCenter = LatLng(41.0082, 28.9784); // Istanbul
 
   @override
   void initState() {
     super.initState();
+    _trackingService = ref.read(driverTrackingServiceProvider);
     _loadUserLocationAndTrucks();
   }
 
@@ -73,7 +82,7 @@ class _MapViewScreenState extends ConsumerState<MapViewScreen> {
       if (mounted) {
         setState(() {
           _isLoadingTrucks = false;
-          _error = 'Location permission denied';
+          _error = 'Konum izni verilmedi. Lütfen ayarlardan izin verin.';
         });
       }
     }
@@ -95,6 +104,7 @@ class _MapViewScreenState extends ConsumerState<MapViewScreen> {
 
   @override
   void dispose() {
+    _searchTimeoutTimer?.cancel();
     _bookingSubscription?.cancel();
     _trackingService.dispose();
     super.dispose();
@@ -118,11 +128,21 @@ class _MapViewScreenState extends ConsumerState<MapViewScreen> {
       ),
     );
     if (result == null || !mounted) return;
+    _searchTimeoutTimer?.cancel();
+    setState(() => _searchingBooking = result);
+    _searchTimeoutTimer = Timer(_driverSearchTimeout, () {
+      if (!mounted || _searchingBooking == null) return;
+      _searchTimeoutTimer = null;
+      _showDriverSearchTimeoutDialog();
+    });
     _bookingSubscription?.cancel();
     _bookingSubscription = _trackingService.watchBookingById(result.id).listen((updated) {
       if (updated?.driverId != null && mounted && _userLocation != null) {
+        _searchTimeoutTimer?.cancel();
+        _searchTimeoutTimer = null;
         _bookingSubscription?.cancel();
         _bookingSubscription = null;
+        setState(() => _searchingBooking = null);
         Navigator.of(context).push(
           MaterialPageRoute<void>(
             builder: (_) => DriverTrackingScreen(
@@ -135,9 +155,48 @@ class _MapViewScreenState extends ConsumerState<MapViewScreen> {
     });
   }
 
+  void _showDriverSearchTimeoutDialog() {
+    showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: const Text(ErrorMessagesTr.stillSearchingTitle),
+        content: const Text(ErrorMessagesTr.stillSearchingBody),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text(ErrorMessagesTr.keepWaiting),
+          ),
+          FilledButton(
+            onPressed: () async {
+              Navigator.of(context).pop();
+              final uri = Uri(scheme: 'tel', path: _supportPhone);
+              if (await canLaunchUrl(uri)) await launchUrl(uri);
+            },
+            child: const Text(ErrorMessagesTr.callSupport),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      appBar: AppBar(
+        title: const Text('Cekici'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.credit_card),
+            tooltip: 'Payment methods',
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => const PaymentMethodsScreen(),
+              ),
+            ),
+          ),
+        ],
+      ),
       body: Stack(
         children: [
           FlutterMap(
@@ -193,6 +252,14 @@ class _MapViewScreenState extends ConsumerState<MapViewScreen> {
                   ),
                 ),
               ),
+            ),
+          if (_searchingBooking != null)
+            Positioned(
+              left: 0,
+              right: 0,
+              top: 0,
+              bottom: 0,
+              child: _SearchingForDriversOverlay(),
             ),
           if (_error != null)
             Positioned(
@@ -355,6 +422,83 @@ class _MapViewScreenState extends ConsumerState<MapViewScreen> {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Pulse overlay shown on the map while waiting for a driver to accept (Client app).
+class _SearchingForDriversOverlay extends StatefulWidget {
+  @override
+  State<_SearchingForDriversOverlay> createState() =>
+      _SearchingForDriversOverlayState();
+}
+
+class _SearchingForDriversOverlayState extends State<_SearchingForDriversOverlay>
+    with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+  late Animation<double> _pulse;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    )..repeat(reverse: true);
+    _pulse = Tween<double>(begin: 0.5, end: 1.0).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: Colors.black26,
+      child: Center(
+        child: AnimatedBuilder(
+          animation: _pulse,
+          builder: (context, child) {
+            return Opacity(
+              opacity: 0.5 + _pulse.value * 0.5,
+              child: child,
+            );
+          },
+          child: Material(
+            elevation: 8,
+            borderRadius: BorderRadius.circular(16),
+            color: Theme.of(context).colorScheme.surface,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  SizedBox(
+                    width: 28,
+                    height: 28,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 3,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Text(
+                    'Searching for nearby drivers...',
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                  ),
+                ],
+              ),
+            ),
+          ),
         ),
       ),
     );

@@ -1,5 +1,4 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/providers.dart';
 import '../../../models/models.dart';
@@ -8,8 +7,9 @@ import '../../../models/models.dart';
 enum AuthStatus { initial, unauthenticated, needsProfile, authenticated }
 
 Future<AuthStatus> _computeStatus(Ref ref) async {
-  final session = Supabase.instance.client.auth.currentSession;
-  final user = Supabase.instance.client.auth.currentUser;
+  final client = ref.read(supabaseClientProvider);
+  final session = client.auth.currentSession;
+  final user = client.auth.currentUser;
   if (session == null || user == null) return AuthStatus.unauthenticated;
   final phone = user.phone;
   if (phone == null || phone.isEmpty) return AuthStatus.unauthenticated;
@@ -21,14 +21,16 @@ Future<AuthStatus> _computeStatus(Ref ref) async {
 final authStatusProvider = StreamProvider<AuthStatus>((ref) async* {
   yield await _computeStatus(ref);
 
-  await for (final _ in Supabase.instance.client.auth.onAuthStateChange) {
+  final client = ref.read(supabaseClientProvider);
+  await for (final _ in client.auth.onAuthStateChange) {
     yield await _computeStatus(ref);
   }
 });
 
 /// Current app user (from public.users). Only valid when status is authenticated.
 final currentAppUserProvider = FutureProvider<User?>((ref) async {
-  final user = Supabase.instance.client.auth.currentUser;
+  final client = ref.read(supabaseClientProvider);
+  final user = client.auth.currentUser;
   final phone = user?.phone;
   if (phone == null || phone.isEmpty) return null;
   return ref.read(authServiceProvider).getUserByPhone(phone);

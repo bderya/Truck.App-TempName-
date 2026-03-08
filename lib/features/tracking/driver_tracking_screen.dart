@@ -5,10 +5,12 @@ import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../core/providers.dart';
 import '../../models/models.dart';
-import '../../services/driver_tracking_service.dart';
 import '../../services/eta_service.dart';
+import '../booking/screens/job_summary_receipt_screen.dart';
 import '../booking/widgets/review_popup.dart';
+import '../chat/chat_screen.dart';
 
 /// Client screen: real-time driver tracking with smooth animated marker and ETA.
 class DriverTrackingScreen extends ConsumerStatefulWidget {
@@ -26,7 +28,7 @@ class DriverTrackingScreen extends ConsumerStatefulWidget {
 }
 
 class _DriverTrackingScreenState extends ConsumerState<DriverTrackingScreen> {
-  final DriverTrackingService _trackingService = DriverTrackingService();
+  late final DriverTrackingService _trackingService;
   final EtaService _etaService = EtaService(averageSpeedKmh: 25);
   StreamSubscription<TowTruck?>? _subscription;
   StreamSubscription<Booking?>? _bookingSubscription;
@@ -37,6 +39,7 @@ class _DriverTrackingScreenState extends ConsumerState<DriverTrackingScreen> {
   @override
   void initState() {
     super.initState();
+    _trackingService = ref.read(driverTrackingServiceProvider);
     _subscribe();
     _subscribeToBooking();
   }
@@ -55,11 +58,20 @@ class _DriverTrackingScreenState extends ConsumerState<DriverTrackingScreen> {
         _reviewShown = true;
         ReviewPopup.show(
           context,
-          onSubmit: (_) => Navigator.of(context).popUntil((route) => route.isFirst),
-          onDismiss: () => Navigator.of(context).popUntil((route) => route.isFirst),
+          onSubmit: (_) => _openReceipt(booking.id),
+          onDismiss: () => _openReceipt(booking.id),
         );
       }
     });
+  }
+
+  void _openReceipt(int bookingId) {
+    Navigator.of(context).pop();
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => JobSummaryReceiptScreen(bookingId: bookingId),
+      ),
+    );
   }
 
   @override
@@ -89,7 +101,23 @@ class _DriverTrackingScreenState extends ConsumerState<DriverTrackingScreen> {
     }
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Driver on the way')),
+      appBar: AppBar(
+        title: const Text('Driver on the way'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.chat_bubble_outline),
+            tooltip: 'Chat',
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute<void>(
+                builder: (_) => ChatScreen(
+                  bookingId: widget.booking.id,
+                  currentUserId: widget.booking.clientId,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
       body: _TrackingMap(
         key: ValueKey(_towTruck!.id),
         truck: _towTruck!,

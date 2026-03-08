@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/providers.dart';
 import 'providers/driver_booking_provider.dart';
+import 'screens/driver_settings_screen.dart';
 import 'screens/driver_wallet_screen.dart';
 import 'screens/job_navigation_screen.dart';
 import 'widgets/job_request_overlay.dart';
@@ -22,6 +23,17 @@ class DriverMapScreen extends ConsumerWidget {
         title: const Text('Driver - Cekici'),
         actions: [
           if (driverId != null) ...[
+            IconButton(
+              icon: const Icon(Icons.settings_outlined),
+              onPressed: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => const DriverSettingsScreen(),
+                  ),
+                );
+              },
+              tooltip: 'Settings',
+            ),
             IconButton(
               icon: const Icon(Icons.account_balance_wallet_outlined),
               onPressed: () {

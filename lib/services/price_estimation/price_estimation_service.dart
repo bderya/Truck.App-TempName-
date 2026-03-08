@@ -12,6 +12,8 @@ class PriceEstimate {
     required this.distanceKm,
     required this.isNightShift,
     this.breakdown,
+    this.estimatedTolls,
+    this.isIntercity = false,
   });
 
   final double minimum;
@@ -19,6 +21,9 @@ class PriceEstimate {
   final double distanceKm;
   final bool isNightShift;
   final String? breakdown;
+  /// Estimated highway/bridge tolls (included in min/max when intercity).
+  final double? estimatedTolls;
+  final bool isIntercity;
 
   /// Midpoint of the range (for display).
   double get midpoint => (minimum + maximum) / 2;
@@ -137,6 +142,7 @@ class PriceEstimationService {
   /// Estimates price range from current location to destination for the given vehicle type.
   ///
   /// Formula: (BaseFee + (Distance * RatePerKm)) * VehicleMultiplier * (1 + NightShiftSurcharge if 10PM–6AM).
+  /// For intercity (distance > 100km): discounted per-km rate + estimated highway/bridge tolls.
   /// Output is a min/max range using [AppConstants.priceRangeVariance].
   Future<PriceEstimate> estimate({
     required double originLat,
@@ -153,21 +159,31 @@ class PriceEstimationService {
     );
 
     final baseFee = AppConstants.basePriceByVehicleType[vehicleType] ?? 50.0;
-    final ratePerKm = AppConstants.ratePerKmByVehicleType[vehicleType] ?? 3.5;
+    var ratePerKm = AppConstants.ratePerKmByVehicleType[vehicleType] ?? 3.5;
     final multiplier = AppConstants.vehicleMultiplierByType[vehicleType] ?? 1.0;
     final nightRate = AppConstants.nightShiftSurchargeRate;
     final variance = AppConstants.priceRangeVariance;
-
     final d = distanceKm ?? 0.0;
+
+    final isIntercity = d >= AppConstants.intercityDiscountThresholdKm;
+    if (isIntercity) {
+      ratePerKm *= AppConstants.intercityRateMultiplier;
+    }
+    final estimatedTolls = isIntercity
+        ? d * AppConstants.intercityTollPerKm
+        : 0.0;
+
     final baseAmount = (baseFee + (d * ratePerKm)) * multiplier;
     final nightFactor = isNightShift ? (1.0 + nightRate) : 1.0;
-    final estimated = baseAmount * nightFactor;
+    final estimated = baseAmount * nightFactor + estimatedTolls;
 
     final minPrice = (estimated * (1 - variance)).clamp(0.0, double.infinity);
     final maxPrice = estimated * (1 + variance);
 
     final breakdown = 'Base: $baseFee + (${d.toStringAsFixed(1)} km × $ratePerKm) × $multiplier'
-        '${isNightShift ? ' × 1.3 (night)' : ''} → ${estimated.toStringAsFixed(0)} ± ${(variance * 100).toInt()}%';
+        '${isNightShift ? ' × 1.3 (night)' : ''}'
+        '${estimatedTolls > 0 ? ' + ${estimatedTolls.toStringAsFixed(0)} (tolls)' : ''}'
+        ' → ${estimated.toStringAsFixed(0)} ± ${(variance * 100).toInt()}%';
 
     return PriceEstimate(
       minimum: minPrice,
@@ -175,6 +191,8 @@ class PriceEstimationService {
       distanceKm: d,
       isNightShift: isNightShift,
       breakdown: breakdown,
+      estimatedTolls: estimatedTolls > 0 ? estimatedTolls : null,
+      isIntercity: isIntercity,
     );
   }
 }

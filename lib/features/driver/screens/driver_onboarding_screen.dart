@@ -4,14 +4,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path/path.dart' as p;
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../core/providers.dart';
 import '../../auth/providers/auth_state_provider.dart';
 import '../providers/driver_booking_provider.dart';
 import '../providers/driver_onboarding_provider.dart';
+import 'registration_received_screen.dart';
 
-/// Multi-step driver onboarding: Full Name, Plate Number, Truck Type, License photo, Vehicle Registration photo.
-/// Saves to users (is_verified: false, status: 'pending') and tow_trucks.
+const String _kOnboardingStepKey = 'driver_onboarding_step';
+
+/// Step 1: Personal (name, TCKN, selfie). Step 2: Vehicle (plate, tow type, max weight).
+/// Step 3: License photo. Step 4: Vehicle reg photo. Step 5: Payout (IBAN, tax ID). Step 6: Submit.
 class DriverOnboardingScreen extends ConsumerStatefulWidget {
   const DriverOnboardingScreen({super.key, this.initialFullName});
 
@@ -24,20 +28,27 @@ class DriverOnboardingScreen extends ConsumerStatefulWidget {
 class _DriverOnboardingScreenState extends ConsumerState<DriverOnboardingScreen> {
   final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
+  final _tcknController = TextEditingController();
   final _plateController = TextEditingController();
+  final _maxWeightController = TextEditingController();
+  final _ibanController = TextEditingController();
+  final _taxIdController = TextEditingController();
+
   int _currentStep = 0;
-  String _truckType = 'standard';
+  String _towTruckStyle = 'sliding_bed';
+  File? _selfieFile;
   File? _licenseFile;
   File? _vehicleRegFile;
   bool _loading = false;
   String? _error;
 
-  static const List<String> _truckTypes = ['standard', 'heavy', 'motorcycle'];
-  static const Map<String, String> _truckLabels = {
-    'standard': 'Standard',
-    'heavy': 'Heavy',
-    'motorcycle': 'Motorcycle',
+  static const List<String> _towTruckStyles = ['sliding_bed', 'fixed', 'crane'];
+  static const Map<String, String> _towTruckLabels = {
+    'sliding_bed': 'Sliding Bed',
+    'fixed': 'Fixed',
+    'crane': 'Crane',
   };
+  static const int _maxSteps = 6;
 
   @override
   void initState() {
@@ -45,16 +56,39 @@ class _DriverOnboardingScreenState extends ConsumerState<DriverOnboardingScreen>
     if (widget.initialFullName != null && widget.initialFullName!.isNotEmpty) {
       _nameController.text = widget.initialFullName!;
     }
+    _loadSavedStep();
+  }
+
+  Future<void> _loadSavedStep() async {
+    final prefs = await SharedPreferences.getInstance();
+    final step = prefs.getInt(_kOnboardingStepKey);
+    if (step != null && step >= 0 && step < _maxSteps && mounted) {
+      setState(() => _currentStep = step);
+    }
+  }
+
+  Future<void> _saveStep(int step) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt(_kOnboardingStepKey, step);
+  }
+
+  Future<void> _clearSavedStep() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_kOnboardingStepKey);
   }
 
   @override
   void dispose() {
     _nameController.dispose();
+    _tcknController.dispose();
     _plateController.dispose();
+    _maxWeightController.dispose();
+    _ibanController.dispose();
+    _taxIdController.dispose();
     super.dispose();
   }
 
-  Future<void> _pickImage(bool isLicense) async {
+  Future<void> _pickImage(int which) async {
     final picker = ImagePicker();
     final source = await showModalBottomSheet<ImageSource>(
       context: context,
@@ -64,12 +98,12 @@ class _DriverOnboardingScreenState extends ConsumerState<DriverOnboardingScreen>
           children: [
             ListTile(
               leading: const Icon(Icons.camera_alt),
-              title: const Text('Camera'),
+              title: const Text('Kamera'),
               onTap: () => Navigator.pop(context, ImageSource.camera),
             ),
             ListTile(
               leading: const Icon(Icons.photo_library),
-              title: const Text('Gallery'),
+              title: const Text('Galeri'),
               onTap: () => Navigator.pop(context, ImageSource.gallery),
             ),
           ],
@@ -80,23 +114,29 @@ class _DriverOnboardingScreenState extends ConsumerState<DriverOnboardingScreen>
     final file = await picker.pickImage(source: source, imageQuality: 85);
     if (file == null || !mounted) return;
     setState(() {
-      if (isLicense) {
-        _licenseFile = File(file.path);
-      } else {
-        _vehicleRegFile = File(file.path);
+      switch (which) {
+        case 0:
+          _selfieFile = File(file.path);
+          break;
+        case 1:
+          _licenseFile = File(file.path);
+          break;
+        case 2:
+          _vehicleRegFile = File(file.path);
+          break;
       }
       _error = null;
     });
   }
 
   Future<void> _submit() async {
-    if (_licenseFile == null || _vehicleRegFile == null) {
-      setState(() => _error = 'Please add both photos');
+    if (_selfieFile == null || _licenseFile == null || _vehicleRegFile == null) {
+      setState(() => _error = 'Lütfen tüm fotoğrafları ekleyin');
       return;
     }
     final user = await ref.read(currentAppUserProvider.future);
     if (user == null) {
-      setState(() => _error = 'Session expired. Please sign in again.');
+      setState(() => _error = 'Oturum sonlandı. Lütfen tekrar giriş yapın.');
       return;
     }
 
@@ -106,14 +146,21 @@ class _DriverOnboardingScreenState extends ConsumerState<DriverOnboardingScreen>
     });
 
     try {
+      final maxWeight = int.tryParse(_maxWeightController.text.trim());
       await ref.read(driverOnboardingServiceProvider).submitOnboarding(
             userId: user.id,
             fullName: _nameController.text.trim(),
+            nationalId: _tcknController.text.trim(),
+            selfieWithLicenseFile: _selfieFile!,
             plateNumber: _plateController.text.trim(),
-            truckType: _truckType,
+            towTruckStyle: _towTruckStyle,
+            maxWeightCapacityKg: maxWeight,
             licenseImageFile: _licenseFile!,
             vehicleRegistrationFile: _vehicleRegFile!,
+            iban: _ibanController.text.trim().isEmpty ? null : _ibanController.text.trim(),
+            legalEntityTaxId: _taxIdController.text.trim().isEmpty ? null : _taxIdController.text.trim(),
           );
+      await _clearSavedStep();
       if (!mounted) return;
       ref.invalidate(currentAuthUserTowTruckProvider);
       ref.invalidate(currentAppUserProvider);
@@ -121,7 +168,11 @@ class _DriverOnboardingScreenState extends ConsumerState<DriverOnboardingScreen>
       ref.invalidate(currentDriverUserProvider);
       ref.invalidate(currentDriverTruckProvider);
       if (!mounted) return;
-      Navigator.of(context).pop();
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute<void>(
+          builder: (_) => const RegistrationReceivedScreen(),
+        ),
+      );
     } catch (e) {
       if (mounted) {
         setState(() {
@@ -133,67 +184,97 @@ class _DriverOnboardingScreenState extends ConsumerState<DriverOnboardingScreen>
     if (mounted) setState(() => _loading = false);
   }
 
+  void _onStepContinue() {
+    if (_currentStep == 0) {
+      if (_nameController.text.trim().isEmpty) {
+        setState(() => _error = 'Ad soyad girin');
+        return;
+      }
+      if (_tcknController.text.trim().length != 11) {
+        setState(() => _error = 'TCKN 11 haneli olmalıdır');
+        return;
+      }
+      if (_selfieFile == null) {
+        setState(() => _error = 'Ehliyet ile selfie yükleyin');
+        return;
+      }
+    }
+    if (_currentStep == 1) {
+      if (_plateController.text.trim().isEmpty) {
+        setState(() => _error = 'Plaka girin');
+        return;
+      }
+    }
+    if (_currentStep == 3) {
+      if (_licenseFile == null) {
+        setState(() => _error = 'Ehliyet fotoğrafı yükleyin');
+        return;
+      }
+    }
+    if (_currentStep == 4) {
+      if (_vehicleRegFile == null) {
+        setState(() => _error = 'Ruhsat fotoğrafı yükleyin');
+        return;
+      }
+    }
+
+    if (_currentStep < _maxSteps - 1) {
+      setState(() {
+        _currentStep++;
+        _error = null;
+      });
+      _saveStep(_currentStep);
+    } else {
+      _submit();
+    }
+  }
+
+  void _onStepCancel() {
+    if (_currentStep > 0) {
+      setState(() {
+        _currentStep--;
+        _error = null;
+      });
+      _saveStep(_currentStep);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Driver registration'),
+        title: const Text('Sürücü kaydı'),
       ),
       body: SafeArea(
         child: Form(
           key: _formKey,
-          child: Stepper(
+          child: Column(
+            children: [
+              Expanded(
+                child: Stepper(
             currentStep: _currentStep,
-            onStepContinue: () {
-              if (_currentStep == 0) {
-                if (_nameController.text.trim().isEmpty) {
-                  setState(() => _error = 'Enter your full name');
-                  return;
-                }
-              }
-              if (_currentStep == 1) {
-                if (_plateController.text.trim().isEmpty) {
-                  setState(() => _error = 'Enter plate number');
-                  return;
-                }
-              }
-              if (_currentStep < 4) {
-                setState(() {
-                  _currentStep++;
-                  _error = null;
-                });
-              } else {
-                _submit();
-              }
-            },
-            onStepCancel: () {
-              if (_currentStep > 0) {
-                setState(() {
-                  _currentStep--;
-                  _error = null;
-                });
-              }
-            },
+            onStepContinue: _onStepContinue,
+            onStepCancel: _onStepCancel,
             controlsBuilder: (context, details) {
               return Padding(
                 padding: const EdgeInsets.only(top: 16),
                 child: Row(
                   children: [
                     FilledButton(
-                      onPressed: _loading ? null : details.onStepContinue,
+                      onPressed: _loading ? null : _onStepContinue,
                       child: _loading
                           ? const SizedBox(
                               height: 20,
                               width: 20,
                               child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                             )
-                          : Text(_currentStep == 4 ? 'Submit' : 'Next'),
+                          : Text(_currentStep == _maxSteps - 1 ? 'Gönder' : 'İleri'),
                     ),
                     if (_currentStep > 0) ...[
                       const SizedBox(width: 12),
                       TextButton(
-                        onPressed: details.onStepCancel,
-                        child: const Text('Back'),
+                        onPressed: _onStepCancel,
+                        child: const Text('Geri'),
                       ),
                     ],
                   ],
@@ -201,89 +282,159 @@ class _DriverOnboardingScreenState extends ConsumerState<DriverOnboardingScreen>
               );
             },
             steps: [
+              // Step 0: Personal
               Step(
-                title: const Text('Full name'),
+                title: const Text('Kişisel bilgiler'),
                 isActive: _currentStep >= 0,
                 state: _currentStep > 0 ? StepState.complete : StepState.indexed,
-                content: TextFormField(
-                  controller: _nameController,
-                  textCapitalization: TextCapitalization.words,
-                  decoration: const InputDecoration(
-                    labelText: 'Full name',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-              ),
-              Step(
-                title: const Text('Plate number'),
-                isActive: _currentStep >= 1,
-                state: _currentStep > 1 ? StepState.complete : StepState.indexed,
-                content: TextFormField(
-                  controller: _plateController,
-                  textCapitalization: TextCapitalization.characters,
-                  decoration: const InputDecoration(
-                    labelText: 'Vehicle plate number',
-                    hintText: '34 ABC 123',
-                    border: OutlineInputBorder(),
-                  ),
-                ),
-              ),
-              Step(
-                title: const Text('Truck type'),
-                isActive: _currentStep >= 2,
-                state: _currentStep > 2 ? StepState.complete : StepState.indexed,
-                content: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: _truckTypes.map((type) {
-                    return RadioListTile<String>(
-                      title: Text(_truckLabels[type] ?? type),
-                      value: type,
-                      groupValue: _truckType,
-                      onChanged: (v) => setState(() => _truckType = v ?? type),
-                    );
-                  }).toList(),
-                ),
-              ),
-              Step(
-                title: const Text('Driver license'),
-                isActive: _currentStep >= 3,
-                state: _currentStep > 3 ? StepState.complete : StepState.indexed,
-                content: ListTile(
-                  title: const Text('Upload driver license photo'),
-                  subtitle: Text(_licenseFile != null ? p.basename(_licenseFile!.path) : 'No file'),
-                  trailing: IconButton(
-                    icon: const Icon(Icons.add_photo_alternate),
-                    onPressed: () => _pickImage(true),
-                  ),
-                ),
-              ),
-              Step(
-                title: const Text('Vehicle registration'),
-                isActive: _currentStep >= 4,
-                state: StepState.indexed,
                 content: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    ListTile(
-                      title: const Text('Upload vehicle registration / plate photo'),
-                      subtitle: Text(_vehicleRegFile != null ? p.basename(_vehicleRegFile!.path) : 'No file'),
-                      trailing: IconButton(
-                        icon: const Icon(Icons.add_photo_alternate),
-                        onPressed: () => _pickImage(false),
+                    TextFormField(
+                      controller: _nameController,
+                      textCapitalization: TextCapitalization.words,
+                      decoration: const InputDecoration(
+                        labelText: 'Ad Soyad',
+                        border: OutlineInputBorder(),
                       ),
                     ),
-                    if (_error != null) ...[
-                      const SizedBox(height: 8),
-                      Text(
-                        _error!,
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: Theme.of(context).colorScheme.error,
-                            ),
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      controller: _tcknController,
+                      keyboardType: TextInputType.number,
+                      maxLength: 11,
+                      decoration: const InputDecoration(
+                        labelText: 'TC Kimlik No (TCKN)',
+                        hintText: '11 hane',
+                        border: OutlineInputBorder(),
                       ),
-                    ],
+                    ),
+                    const SizedBox(height: 12),
+                    ListTile(
+                      title: const Text('Ehliyet ile selfie'),
+                      subtitle: Text(_selfieFile != null ? p.basename(_selfieFile!.path) : 'Fotoğraf yükleyin'),
+                      trailing: IconButton(
+                        icon: const Icon(Icons.add_photo_alternate),
+                        onPressed: () => _pickImage(0),
+                      ),
+                    ),
                   ],
                 ),
               ),
+              // Step 1: Vehicle detail
+              Step(
+                title: const Text('Araç bilgisi'),
+                isActive: _currentStep >= 1,
+                state: _currentStep > 1 ? StepState.complete : StepState.indexed,
+                content: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    TextFormField(
+                      controller: _plateController,
+                      textCapitalization: TextCapitalization.characters,
+                      decoration: const InputDecoration(
+                        labelText: 'Plaka',
+                        hintText: '34 ABC 123',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    const Text('Çekici tipi', style: TextStyle(fontWeight: FontWeight.w500)),
+                    const SizedBox(height: 8),
+                    DropdownButtonFormField<String>(
+                      value: _towTruckStyle,
+                      decoration: const InputDecoration(border: OutlineInputBorder()),
+                      items: _towTruckStyles.map((s) => DropdownMenuItem(value: s, child: Text(_towTruckLabels[s] ?? s))).toList(),
+                      onChanged: (v) => setState(() => _towTruckStyle = v ?? _towTruckStyle),
+                    ),
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      controller: _maxWeightController,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                        labelText: 'Maks. ağırlık kapasitesi (kg)',
+                        hintText: 'Örn. 3500',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              // Step 2: Driver license photo
+              Step(
+                title: const Text('Ehliyet'),
+                isActive: _currentStep >= 2,
+                state: _currentStep > 2 ? StepState.complete : StepState.indexed,
+                content: ListTile(
+                  title: const Text('Ehliyet fotoğrafı yükleyin'),
+                  subtitle: Text(_licenseFile != null ? p.basename(_licenseFile!.path) : 'Dosya yok'),
+                  trailing: IconButton(
+                    icon: const Icon(Icons.add_photo_alternate),
+                    onPressed: () => _pickImage(1),
+                  ),
+                ),
+              ),
+              // Step 3: Vehicle registration photo
+              Step(
+                title: const Text('Ruhsat'),
+                isActive: _currentStep >= 3,
+                state: _currentStep > 3 ? StepState.complete : StepState.indexed,
+                content: ListTile(
+                  title: const Text('Ruhsat / plaka fotoğrafı yükleyin'),
+                  subtitle: Text(_vehicleRegFile != null ? p.basename(_vehicleRegFile!.path) : 'Dosya yok'),
+                  trailing: IconButton(
+                    icon: const Icon(Icons.add_photo_alternate),
+                    onPressed: () => _pickImage(2),
+                  ),
+                ),
+              ),
+              // Step 4: Payout
+              Step(
+                title: const Text('Ödeme bilgisi'),
+                isActive: _currentStep >= 4,
+                state: _currentStep > 4 ? StepState.complete : StepState.indexed,
+                content: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    TextFormField(
+                      controller: _ibanController,
+                      decoration: const InputDecoration(
+                        labelText: 'IBAN',
+                        hintText: 'TR00 0000 0000 0000 0000 0000 00',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextFormField(
+                      controller: _taxIdController,
+                      decoration: const InputDecoration(
+                        labelText: 'Vergi no / Tüzel kişi (isteğe bağlı)',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              // Step 5: Submit
+              Step(
+                title: const Text('Gönder'),
+                isActive: _currentStep >= 5,
+                state: StepState.indexed,
+                content: const Text('Tüm bilgileri kontrol edip gönderin.'),
+              ),
+            ],
+          ),
+            ),
+          if (_error != null)
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Text(
+                _error!,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: Theme.of(context).colorScheme.error,
+                    ),
+              ),
+            ),
             ],
           ),
         ),

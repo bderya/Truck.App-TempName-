@@ -17,6 +17,12 @@ class Booking {
     this.endedAt,
     this.createdAt,
     this.updatedAt,
+    this.isIntercity = false,
+    this.desiredPickupAt,
+    this.estimatedTolls,
+    this.destinationLat,
+    this.destinationLng,
+    this.vehicleValueTier,
   });
 
   final int id;
@@ -39,6 +45,16 @@ class Booking {
   final DateTime? endedAt;
   final DateTime? createdAt;
   final DateTime? updatedAt;
+  /// True when pickup and destination are in different cities / long distance.
+  final bool isIntercity;
+  /// For intercity: preferred pickup date/time (planned transfer).
+  final DateTime? desiredPickupAt;
+  /// Estimated highway/bridge tolls included in price.
+  final double? estimatedTolls;
+  final double? destinationLat;
+  final double? destinationLng;
+  /// low, medium, high. High value restricts job to Gold drivers only.
+  final String? vehicleValueTier;
 
   factory Booking.fromJson(Map<String, dynamic> json) {
     final damagePhotosRaw = json['damage_photos'];
@@ -69,6 +85,14 @@ class Booking {
       updatedAt: json['updated_at'] != null
           ? DateTime.parse(json['updated_at'] as String)
           : null,
+      isIntercity: json['is_intercity'] as bool? ?? false,
+      desiredPickupAt: json['desired_pickup_at'] != null
+          ? DateTime.parse(json['desired_pickup_at'] as String)
+          : null,
+      estimatedTolls: (json['estimated_tolls'] as num?)?.toDouble(),
+      destinationLat: (json['destination_lat'] as num?)?.toDouble(),
+      destinationLng: (json['destination_lng'] as num?)?.toDouble(),
+      vehicleValueTier: json['vehicle_value_tier'] as String?,
     );
   }
 
@@ -89,6 +113,12 @@ class Booking {
         if (endedAt != null) 'ended_at': endedAt!.toIso8601String(),
         if (createdAt != null) 'created_at': createdAt!.toIso8601String(),
         if (updatedAt != null) 'updated_at': updatedAt!.toIso8601String(),
+        'is_intercity': isIntercity,
+        if (desiredPickupAt != null) 'desired_pickup_at': desiredPickupAt!.toIso8601String(),
+        if (estimatedTolls != null) 'estimated_tolls': estimatedTolls,
+        if (destinationLat != null) 'destination_lat': destinationLat,
+        if (destinationLng != null) 'destination_lng': destinationLng,
+        if (vehicleValueTier != null) 'vehicle_value_tier': vehicleValueTier,
       };
 
   Booking copyWith({
@@ -108,6 +138,12 @@ class Booking {
     DateTime? endedAt,
     DateTime? createdAt,
     DateTime? updatedAt,
+    bool? isIntercity,
+    DateTime? desiredPickupAt,
+    double? estimatedTolls,
+    double? destinationLat,
+    double? destinationLng,
+    String? vehicleValueTier,
   }) =>
       Booking(
         id: id ?? this.id,
@@ -127,6 +163,12 @@ class Booking {
         endedAt: endedAt ?? this.endedAt,
         createdAt: createdAt ?? this.createdAt,
         updatedAt: updatedAt ?? this.updatedAt,
+        isIntercity: isIntercity ?? this.isIntercity,
+        desiredPickupAt: desiredPickupAt ?? this.desiredPickupAt,
+        estimatedTolls: estimatedTolls ?? this.estimatedTolls,
+        destinationLat: destinationLat ?? this.destinationLat,
+        destinationLng: destinationLng ?? this.destinationLng,
+        vehicleValueTier: vehicleValueTier ?? this.vehicleValueTier,
       );
 
   @override

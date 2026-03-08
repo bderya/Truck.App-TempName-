@@ -5,13 +5,14 @@ import 'package:url_launcher/url_launcher.dart';
 
 import '../../../models/models.dart';
 import '../../../services/location_service.dart';
+import '../../chat/chat_screen.dart';
 import 'delivery_signature_screen.dart';
 import 'pre_pickup_photo_screen.dart';
 
 /// Navigation view opened after driver accepts a job. Shows pickup on map
 /// and option to open in external maps app.
-/// When [towTruckId] is set, starts a background location stream (every 5s)
-/// to update the tow_trucks row so the client can track the driver in real time.
+/// When [towTruckId] is set, starts high-frequency location sync to [tow_trucks]
+/// so the client can track the driver in real time.
 class JobNavigationScreen extends StatefulWidget {
   const JobNavigationScreen({
     super.key,
@@ -33,9 +34,8 @@ class _JobNavigationScreenState extends State<JobNavigationScreen> {
   void initState() {
     super.initState();
     if (widget.towTruckId != null) {
-      widget.locationService.startLocationStreamToSupabase(
+      widget.locationService.startHighFrequencyLocationSync(
         towTruckId: widget.towTruckId!,
-        intervalSeconds: 5,
       );
     }
   }
@@ -54,6 +54,21 @@ class _JobNavigationScreenState extends State<JobNavigationScreen> {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Navigate to pickup'),
+        actions: [
+          if (widget.booking.driverId != null)
+            IconButton(
+              icon: const Icon(Icons.chat_bubble_outline),
+              tooltip: 'Chat',
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => ChatScreen(
+                    bookingId: widget.booking.id,
+                    currentUserId: widget.booking.driverId!,
+                  ),
+                ),
+              ),
+            ),
+        ],
       ),
       body: Column(
         children: [

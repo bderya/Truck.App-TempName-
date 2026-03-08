@@ -120,9 +120,10 @@ class _JobRequestOverlayState extends State<JobRequestOverlay> {
 
     return Material(
       color: Colors.black54,
-      child: SafeArea(
-        child: Center(
-          child: Padding(
+      child: SizedBox.expand(
+        child: SafeArea(
+          child: Center(
+            child: Padding(
             padding: const EdgeInsets.all(24),
             child: Material(
               elevation: 8,
@@ -134,11 +135,32 @@ class _JobRequestOverlayState extends State<JobRequestOverlay> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Text(
-                      'New Job Request',
-                      style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                            fontWeight: FontWeight.bold,
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            'New Job Request',
+                            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                ),
                           ),
+                        ),
+                        if (widget.booking.isIntercity)
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: Theme.of(context).colorScheme.tertiaryContainer,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              'Intercity',
+                              style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                                    color: Theme.of(context).colorScheme.onTertiaryContainer,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                            ),
+                          ),
+                      ],
                     ),
                     const SizedBox(height: 20),
                     Row(

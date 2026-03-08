@@ -56,6 +56,19 @@ class LocationService {
     _syncPositionToSupabase(towTruckId);
   }
 
+  /// High-frequency location sync for the Driver app: updates [tow_trucks] current_latitude
+  /// and current_longitude every [intervalSeconds] (default 2). Use for live driver tracking.
+  /// Call [stopLocationStream] when done.
+  void startHighFrequencyLocationSync({
+    required int towTruckId,
+    int intervalSeconds = 2,
+  }) {
+    startLocationStreamToSupabase(
+      towTruckId: towTruckId,
+      intervalSeconds: intervalSeconds,
+    );
+  }
+
   Future<void> _syncPositionToSupabase(int towTruckId) async {
     try {
       final position = await Geolocator.getCurrentPosition(

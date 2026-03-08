@@ -1,13 +1,16 @@
 import 'package:flutter/material.dart';
 
+import '../../core/error_messages_tr.dart';
 import 'payment_types.dart';
+import '../../features/booking/widgets/payment_failure_sheet.dart';
 
-/// Handles payment result and shows snackbar on failure (e.g. insufficient funds).
+/// Handles payment result. On failure shows payment BottomSheet with [Update Payment Method] if [userId] provided.
 void handlePaymentResult<T>(
   BuildContext context,
   PaymentResult<T> result, {
-  String successMessage = 'Payment successful',
+  String successMessage = 'Ödeme başarılı',
   void Function(T data)? onSuccess,
+  int? userId,
 }) {
   switch (result) {
     case PaymentSuccess(:final data):
@@ -21,43 +24,35 @@ void handlePaymentResult<T>(
         );
       }
       break;
-    case PaymentFailure(:final reason, :final code):
+    case PaymentFailure():
       if (context.mounted) {
-        _showPaymentFailureSnackBar(context, reason, code);
+        if (userId != null) {
+          showPaymentFailureSheet(context, failure: result, userId: userId);
+        } else {
+          _showPaymentFailureSnackBar(context, result);
+        }
       }
       break;
   }
 }
 
-void _showPaymentFailureSnackBar(
-  BuildContext context,
-  String reason,
-  String? code,
-) {
-  final failure = PaymentFailure(reason, code: code);
-  String message = reason;
-  if (failure.isInsufficientFunds) {
-    message = 'Insufficient funds. Please use another card or add funds.';
-  } else if (failure.isCardDeclined) {
-    message = 'Card was declined. Please try another card.';
-  }
-
+void _showPaymentFailureSnackBar(BuildContext context, PaymentFailure failure) {
+  final message = PaymentErrorHelper.userMessageTr(failure);
   ScaffoldMessenger.of(context).showSnackBar(
     SnackBar(
       content: Text(message),
       backgroundColor: Theme.of(context).colorScheme.error,
       action: SnackBarAction(
-        label: 'Dismiss',
+        label: 'Kapat',
         textColor: Colors.white,
-        onPressed: () =>
-            ScaffoldMessenger.of(context).hideCurrentSnackBar(),
+        onPressed: () => ScaffoldMessenger.of(context).hideCurrentSnackBar(),
       ),
     ),
   );
 }
 
-/// Call when a booking is completed: run split payment (X% platform, Y% driver)
-/// and show success or failure snackbar (e.g. insufficient funds, card declined).
+/// Call when a booking is completed: run split payment (X% platform, Y% driver).
+/// Pass [userId] to show payment failure sheet with Update Payment Method.
 Future<void> processBookingPaymentAndNotify({
   required BuildContext context,
   required PaymentService paymentService,
@@ -68,6 +63,7 @@ Future<void> processBookingPaymentAndNotify({
   required String driverStripeAccountId,
   double? platformPercent,
   double? driverPercent,
+  int? userId,
 }) async {
   final result = await paymentService.distributeFunds(
     cardTokenId: cardTokenId,
@@ -82,7 +78,8 @@ Future<void> processBookingPaymentAndNotify({
   handlePaymentResult(
     context,
     result,
-    successMessage: 'Payment completed. Funds have been split to platform and driver.',
+    successMessage: 'Ödeme tamamlandı. Tutar platform ve sürücüye dağıtıldı.',
     onSuccess: (_) {},
+    userId: userId,
   );
 }

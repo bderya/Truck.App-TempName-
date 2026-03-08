@@ -12,6 +12,18 @@ abstract class PaymentService {
     String? customerId,
   });
 
+  /// Tokenize card (via gateway) and save to user_payment_methods. Use either [cardToken]
+  /// from client-side SDK or [cardNumber]/[expMonth]/[expYear]/[cvc] for server-side tokenization.
+  Future<PaymentResult<CardToken>> tokenizeAndSaveCard({
+    required int userId,
+    String? cardToken,
+    String? cardNumber,
+    int? expMonth,
+    int? expYear,
+    String? cvc,
+    bool setDefault = true,
+  });
+
   /// Pre-authorizes payment (auth only, no capture). Use for Request Tow; store returned
   /// [payment_id] on the booking and capture when job is completed.
   /// Iyzico: paymentGroup=LISTING, auth=true. Stripe: PaymentIntent capture_method=manual.

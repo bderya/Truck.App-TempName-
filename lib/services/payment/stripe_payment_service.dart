@@ -17,6 +17,7 @@ class StripePaymentService implements PaymentService {
   static const _rpcAddCard = 'payment_add_card';
   static const _rpcDistributeFunds = 'payment_distribute_funds';
   static const _rpcAuthorize = 'payment_authorize';
+  static const _rpcTokenizeAndSave = 'payment_tokenize_and_save';
 
   @override
   Future<PaymentResult<CardToken>> addCard({
@@ -51,6 +52,51 @@ class StripePaymentService implements PaymentService {
       return PaymentFailure(
         e.toString(),
         code: 'add_card_error',
+      );
+    }
+  }
+
+  @override
+  Future<PaymentResult<CardToken>> tokenizeAndSaveCard({
+    required int userId,
+    String? cardToken,
+    String? cardNumber,
+    int? expMonth,
+    int? expYear,
+    String? cvc,
+    bool setDefault = true,
+  }) async {
+    try {
+      final params = <String, dynamic>{
+        'p_user_id': userId,
+        'p_set_default': setDefault,
+        if (cardToken != null && cardToken.isNotEmpty) 'p_card_token': cardToken,
+        if (cardNumber != null) 'p_card_number': cardNumber.replaceAll(RegExp(r'\s'), ''),
+        if (expMonth != null) 'p_exp_month': expMonth,
+        if (expYear != null) 'p_exp_year': expYear,
+        if (cvc != null) 'p_cvc': cvc,
+      };
+      final res = await _client.rpc(_rpcTokenizeAndSave, params: params) as Map<String, dynamic>?;
+
+      if (res == null || res['ok'] != true) {
+        return PaymentFailure(
+          res?['error'] as String? ?? 'Failed to save card',
+          code: res?['code'] as String?,
+        );
+      }
+
+      final token = CardToken(
+        tokenId: res['token_id'] as String,
+        last4: res['last4'] as String?,
+        brand: res['brand'] as String?,
+        expMonth: res['exp_month'] as int?,
+        expYear: res['exp_year'] as int?,
+      );
+      return PaymentSuccess(token);
+    } catch (e) {
+      return PaymentFailure(
+        e.toString(),
+        code: 'tokenize_and_save_error',
       );
     }
   }

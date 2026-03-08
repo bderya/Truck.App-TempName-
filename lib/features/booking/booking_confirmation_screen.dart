@@ -5,12 +5,14 @@ import 'package:latlong2/latlong.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/constants.dart';
+import '../../core/providers.dart';
 import '../../models/models.dart';
 import '../../services/payment/payment_types.dart';
 import '../auth/providers/auth_state_provider.dart';
 import '../auth/widgets/lazy_auth_bottom_sheet.dart';
 import 'route_helper.dart';
 import 'widgets/add_card_sheet.dart';
+import 'widgets/payment_failure_sheet.dart';
 
 /// Vehicle type for UI: Car = standard, Bike = motorcycle, Truck = heavy.
 const _vehicleOptions = [
@@ -44,8 +46,12 @@ class _BookingConfirmationScreenState extends ConsumerState<BookingConfirmationS
   bool _routeLoading = true;
   int _selectedIndex = 0;
   bool _isMatching = false;
+  bool _isAuthorizing = false;
+  /// For intercity: desired pickup date/time (null = ASAP).
+  DateTime? _desiredPickupAt;
 
   String get _vehicleType => _vehicleOptions[_selectedIndex].$2;
+  bool get _isIntercity => _distanceKm >= AppConstants.intercityDistanceThresholdKm;
 
   /// Resolves client, ensures saved card, runs pre-auth, then creates booking with payment_id.
   Future<void> _onRequestTow() async {
@@ -79,20 +85,22 @@ class _BookingConfirmationScreenState extends ConsumerState<BookingConfirmationS
     }
     if (cardTokenId == null || cardTokenId.isEmpty) return;
 
+    setState(() => _isAuthorizing = true);
     final authResult = await ref.read(paymentServiceProvider).authorizeOnly(
           cardTokenId: cardTokenId,
           amount: _price,
           currency: 'TRY',
           customerId: clientId.toString(),
         );
+    if (mounted) setState(() => _isAuthorizing = false);
 
     if (authResult is PaymentFailure) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(authResult.reason),
-            backgroundColor: Theme.of(context).colorScheme.error,
-          ),
+        await showPaymentFailureSheet(
+          context,
+          failure: authResult,
+          userId: clientId,
+          onUpdatePaymentMethod: () => _onRequestTow(),
         );
       }
       return;
@@ -128,19 +136,25 @@ class _BookingConfirmationScreenState extends ConsumerState<BookingConfirmationS
     return meters / 1000;
   }
 
-  /// Price: (Base + (Distance * Rate)) * Multiplier
+  /// Price: (Base + (Distance * Rate)) * Multiplier. Intercity >100km: discounted rate + tolls.
   double get _price {
     final base = AppConstants.basePriceByVehicleType[_vehicleType] ?? 50;
-    final rate = AppConstants.ratePerKmByVehicleType[_vehicleType] ?? 3.5;
+    var rate = AppConstants.ratePerKmByVehicleType[_vehicleType] ?? 3.5;
     final mult = AppConstants.vehicleMultiplierByType[_vehicleType] ?? 1.0;
-    return (base + (_distanceKm * rate)) * mult;
+    if (_distanceKm >= AppConstants.intercityDiscountThresholdKm) {
+      rate *= AppConstants.intercityRateMultiplier;
+    }
+    final tolls = _isIntercity ? _distanceKm * AppConstants.intercityTollPerKm : 0.0;
+    return (base + (_distanceKm * rate)) * mult + tolls;
   }
+
+  double? get _estimatedTolls => _isIntercity ? _distanceKm * AppConstants.intercityTollPerKm : null;
 
   Future<void> _startMatching(int clientId, {String? paymentId}) async {
     setState(() => _isMatching = true);
 
     try {
-      final res = await Supabase.instance.client
+      final res = await ref.read(supabaseClientProvider)
           .from('bookings')
           .insert({
             'client_id': clientId,
@@ -148,9 +162,14 @@ class _BookingConfirmationScreenState extends ConsumerState<BookingConfirmationS
             'destination_address': widget.destinationAddress,
             'pickup_lat': widget.userLocation.latitude,
             'pickup_lng': widget.userLocation.longitude,
+            'destination_lat': widget.destinationLocation.latitude,
+            'destination_lng': widget.destinationLocation.longitude,
             'price': _price,
             'vehicle_type_requested': _vehicleType,
             'status': 'pending',
+            'is_intercity': _isIntercity,
+            if (_desiredPickupAt != null) 'desired_pickup_at': _desiredPickupAt!.toIso8601String(),
+            if (_estimatedTolls != null) 'estimated_tolls': _estimatedTolls,
             if (paymentId != null && paymentId.isNotEmpty) 'payment_id': paymentId,
           })
           .select()
@@ -246,11 +265,11 @@ class _BookingConfirmationScreenState extends ConsumerState<BookingConfirmationS
                   const Center(
                     child: CircularProgressIndicator(),
                   ),
-                if (_isMatching)
+                if (_isAuthorizing || _isMatching)
                   Positioned.fill(
                     child: Stack(
                       children: [
-                        _RippleOverlay(),
+                        if (_isMatching) _RippleOverlay(),
                         Container(
                           color: Colors.black26,
                           child: Center(
@@ -267,7 +286,9 @@ class _BookingConfirmationScreenState extends ConsumerState<BookingConfirmationS
                                 ),
                                 const SizedBox(height: 16),
                                 Text(
-                                  'Searching for nearby drivers...',
+                                  _isAuthorizing
+                                      ? 'Authorizing payment...'
+                                      : 'Searching for nearby drivers...',
                                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
                                         color: Colors.white,
                                         fontWeight: FontWeight.w500,
@@ -302,6 +323,81 @@ class _BookingConfirmationScreenState extends ConsumerState<BookingConfirmationS
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  if (_isIntercity) ...[
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).colorScheme.tertiaryContainer.withValues(alpha: 0.5),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.route, color: Theme.of(context).colorScheme.tertiary),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Intercity trip (${_distanceKm.toStringAsFixed(0)} km)',
+                            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                                  color: Theme.of(context).colorScheme.onSurface,
+                                ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Desired pickup',
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                            color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.8),
+                          ),
+                    ),
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: () => setState(() => _desiredPickupAt = null),
+                            icon: Icon(_desiredPickupAt == null ? Icons.check_circle : Icons.circle_outlined, size: 20),
+                            label: const Text('ASAP'),
+                            style: OutlinedButton.styleFrom(
+                              backgroundColor: _desiredPickupAt == null
+                                  ? Theme.of(context).colorScheme.primaryContainer
+                                  : null,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: () async {
+                              final date = await showDatePicker(
+                                context: context,
+                                initialDate: DateTime.now().add(const Duration(days: 1)),
+                                firstDate: DateTime.now(),
+                                lastDate: DateTime.now().add(const Duration(days: 365)),
+                              );
+                              if (date == null || !mounted) return;
+                              final time = await showTimePicker(
+                                context: context,
+                                initialTime: TimeOfDay.now(),
+                              );
+                              if (time == null || !mounted) return;
+                              setState(() => _desiredPickupAt = DateTime(date.year, date.month, date.day, time.hour, time.minute));
+                            },
+                            icon: Icon(_desiredPickupAt != null ? Icons.check_circle : Icons.calendar_today, size: 20),
+                            label: Text(_desiredPickupAt != null
+                                ? '${_desiredPickupAt!.day}/${_desiredPickupAt!.month}/${_desiredPickupAt!.year} ${_desiredPickupAt!.hour.toString().padLeft(2, '0')}:${_desiredPickupAt!.minute.toString().padLeft(2, '0')}'
+                                : 'Pick date'),
+                            style: OutlinedButton.styleFrom(
+                              backgroundColor: _desiredPickupAt != null
+                                  ? Theme.of(context).colorScheme.primaryContainer
+                                  : null,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                  ],
                   Text(
                     'Vehicle type',
                     style: Theme.of(context).textTheme.titleSmall?.copyWith(
@@ -376,7 +472,9 @@ class _BookingConfirmationScreenState extends ConsumerState<BookingConfirmationS
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    '(Base + (Distance × Rate)) × Multiplier',
+                    _isIntercity && _estimatedTolls != null
+                        ? '(Base + distance × rate) × multiplier + tolls (${_estimatedTolls!.toStringAsFixed(0)} ${AppConstants.currencySymbol})'
+                        : '(Base + (Distance × Rate)) × Multiplier',
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           fontStyle: FontStyle.italic,
                           color: Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.6),
@@ -391,7 +489,7 @@ class _BookingConfirmationScreenState extends ConsumerState<BookingConfirmationS
                   ),
                   const SizedBox(height: 24),
                   FilledButton(
-                    onPressed: _isMatching ? null : _onRequestTow,
+                    onPressed: (_isAuthorizing || _isMatching) ? null : _onRequestTow,
                     style: FilledButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 18),
                       shape: RoundedRectangleBorder(

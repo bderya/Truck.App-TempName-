@@ -3,7 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/providers.dart';
-import '../../../services/payment/payment_types.dart';
+import '../../../core/error_messages_tr.dart';
+import '../../../services/payment/payment_types.dart' show CardToken, PaymentFailure, PaymentSuccess, PaymentErrorHelper;
 import '../../auth/providers/auth_state_provider.dart';
 
 /// Bottom sheet to add a payment method. Tokenization must be done via gateway SDK
@@ -64,14 +65,14 @@ class _AddCardSheetState extends ConsumerState<AddCardSheet> {
       } else if (result is PaymentFailure) {
         setState(() {
           _loading = false;
-          _error = result.reason;
+          _error = PaymentErrorHelper.userMessageTr(result);
         });
       }
     } catch (e) {
       if (mounted) {
         setState(() {
           _loading = false;
-          _error = e.toString().replaceFirst('Exception: ', '');
+          _error = ErrorMessagesTr.from(e);
         });
       }
     }

@@ -12,6 +12,12 @@ class User {
     this.status = 'pending',
     this.licenseImageUrl,
     this.criminalRecordUrl,
+    this.nationalId,
+    this.selfieWithLicenseUrl,
+    this.iban,
+    this.legalEntityTaxId,
+    this.averageRating,
+    this.isUnderReview = false,
     this.createdAt,
     this.updatedAt,
   });
@@ -22,12 +28,19 @@ class User {
   final String userType; // 'client' | 'driver'
   final String? avatarUrl;
   final String? email;
-  /// Saved payment method token ID (gateway); no raw card stored.
   final String? defaultCardTokenId;
   final bool isVerified;
   final String status; // 'pending' | 'approved' | 'rejected'
   final String? licenseImageUrl;
   final String? criminalRecordUrl;
+  final String? nationalId;
+  final String? selfieWithLicenseUrl;
+  final String? iban;
+  final String? legalEntityTaxId;
+  /// Driver: average of client ratings. Below 3.5 triggers review.
+  final double? averageRating;
+  /// Driver: true when average_rating < 3.5; hidden from map and dispatch.
+  final bool isUnderReview;
   final DateTime? createdAt;
   final DateTime? updatedAt;
 
@@ -43,6 +56,12 @@ class User {
         status: json['status'] as String? ?? 'pending',
         licenseImageUrl: json['license_image_url'] as String?,
         criminalRecordUrl: json['criminal_record_url'] as String?,
+        nationalId: json['national_id'] as String?,
+        selfieWithLicenseUrl: json['selfie_with_license_url'] as String?,
+        iban: json['iban'] as String?,
+        legalEntityTaxId: json['legal_entity_tax_id'] as String?,
+        averageRating: (json['average_rating'] as num?)?.toDouble(),
+        isUnderReview: json['is_under_review'] as bool? ?? false,
         createdAt: json['created_at'] != null
             ? DateTime.parse(json['created_at'] as String)
             : null,
@@ -63,6 +82,12 @@ class User {
         'status': status,
         if (licenseImageUrl != null) 'license_image_url': licenseImageUrl,
         if (criminalRecordUrl != null) 'criminal_record_url': criminalRecordUrl,
+        if (nationalId != null) 'national_id': nationalId,
+        if (selfieWithLicenseUrl != null) 'selfie_with_license_url': selfieWithLicenseUrl,
+        if (iban != null) 'iban': iban,
+        if (legalEntityTaxId != null) 'legal_entity_tax_id': legalEntityTaxId,
+        if (averageRating != null) 'average_rating': averageRating,
+        'is_under_review': isUnderReview,
         if (createdAt != null) 'created_at': createdAt!.toIso8601String(),
         if (updatedAt != null) 'updated_at': updatedAt!.toIso8601String(),
       };
@@ -79,6 +104,12 @@ class User {
     String? status,
     String? licenseImageUrl,
     String? criminalRecordUrl,
+    String? nationalId,
+    String? selfieWithLicenseUrl,
+    String? iban,
+    String? legalEntityTaxId,
+    double? averageRating,
+    bool? isUnderReview,
     DateTime? createdAt,
     DateTime? updatedAt,
   }) =>
@@ -94,6 +125,12 @@ class User {
         status: status ?? this.status,
         licenseImageUrl: licenseImageUrl ?? this.licenseImageUrl,
         criminalRecordUrl: criminalRecordUrl ?? this.criminalRecordUrl,
+        nationalId: nationalId ?? this.nationalId,
+        selfieWithLicenseUrl: selfieWithLicenseUrl ?? this.selfieWithLicenseUrl,
+        iban: iban ?? this.iban,
+        legalEntityTaxId: legalEntityTaxId ?? this.legalEntityTaxId,
+        averageRating: averageRating ?? this.averageRating,
+        isUnderReview: isUnderReview ?? this.isUnderReview,
         createdAt: createdAt ?? this.createdAt,
         updatedAt: updatedAt ?? this.updatedAt,
       );

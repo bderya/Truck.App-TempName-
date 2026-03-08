@@ -31,24 +31,47 @@ class DriverOnboardingService {
     return _client.storage.from(_bucket).getPublicUrl(path);
   }
 
-  /// Saves driver onboarding: updates users (full_name, license_image_url, user_type, is_verified, status)
-  /// and inserts tow_trucks (driver_id, plate_number, truck_type, plate_image_url).
+  /// Maps tow_truck_style to schema truck_type (standard/heavy/motorcycle).
+  static String _mapStyleToTruckType(String towTruckStyle) {
+    switch (towTruckStyle) {
+      case 'crane':
+        return 'heavy';
+      case 'sliding_bed':
+      case 'fixed':
+      default:
+        return 'standard';
+    }
+  }
+
+  /// Saves driver onboarding: users (full_name, national_id, selfie, license, iban, tax_id, ...)
+  /// and tow_trucks (plate_number, truck_type, tow_truck_style, max_weight_capacity_kg, plate_image_url).
   /// Sets is_verified = false and status = 'pending'.
   Future<void> submitOnboarding({
     required int userId,
     required String fullName,
+    required String nationalId,
+    required File selfieWithLicenseFile,
     required String plateNumber,
-    required String truckType,
+    required String towTruckStyle,
+    required int? maxWeightCapacityKg,
     required File licenseImageFile,
     required File vehicleRegistrationFile,
+    String? iban,
+    String? legalEntityTaxId,
   }) async {
     final licenseUrl = await _uploadImage(userId, licenseImageFile, 'license.jpg');
     final plateUrl = await _uploadImage(userId, vehicleRegistrationFile, 'plate.jpg');
+    final selfieUrl = await _uploadImage(userId, selfieWithLicenseFile, 'selfie_with_license.jpg');
+    final truckType = _mapStyleToTruckType(towTruckStyle);
 
     await _client.from('users').update({
       'full_name': fullName,
       'user_type': 'driver',
+      'national_id': nationalId.trim(),
+      'selfie_with_license_url': selfieUrl,
       'license_image_url': licenseUrl,
+      'iban': iban?.trim().isEmpty == true ? null : iban?.trim(),
+      'legal_entity_tax_id': legalEntityTaxId?.trim().isEmpty == true ? null : legalEntityTaxId?.trim(),
       'is_verified': false,
       'status': 'pending',
       'updated_at': DateTime.now().toIso8601String(),
@@ -58,6 +81,8 @@ class DriverOnboardingService {
       'driver_id': userId,
       'plate_number': plateNumber.trim(),
       'truck_type': truckType,
+      'tow_truck_style': towTruckStyle,
+      'max_weight_capacity_kg': maxWeightCapacityKg,
       'plate_image_url': plateUrl,
       'current_latitude': 0,
       'current_longitude': 0,

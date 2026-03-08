@@ -17,8 +17,7 @@ class PendingJobRequest {
 }
 
 /// Provider that listens for new pending bookings and exposes them to nearby drivers.
-/// Trigger: Supabase Realtime (INSERT on bookings). Alternatively wire Socket.io
-/// to set state when a new pending booking is pushed from the server.
+/// Intercity jobs are only shown when [openToIntercity] is true.
 class DriverBookingNotifier extends StateNotifier<PendingJobRequest?> {
   DriverBookingNotifier({
     required this.driverId,
@@ -26,6 +25,10 @@ class DriverBookingNotifier extends StateNotifier<PendingJobRequest?> {
     required this.supabase,
     required this.locationService,
     this.maxDistanceKm = 10,
+    this.openToIntercity = false,
+    this.isInspected = true,
+    this.isUnderReview = false,
+    this.tierCategory,
   }) : super(null) {
     if (driverId != null && driverTruckType != null) {
       _subscribe();
@@ -37,6 +40,13 @@ class DriverBookingNotifier extends StateNotifier<PendingJobRequest?> {
   final SupabaseClient supabase;
   final LocationService locationService;
   final double maxDistanceKm;
+  final bool openToIntercity;
+  /// When false, driver cannot take jobs (weekly inspection not done).
+  final bool isInspected;
+  /// When true, driver is in review (rating < 3.5) and hidden from jobs.
+  final bool isUnderReview;
+  /// Gold, Silver, Bronze. High-value jobs only go to Gold.
+  final String? tierCategory;
 
   RealtimeChannel? _channel;
 
@@ -57,6 +67,14 @@ class DriverBookingNotifier extends StateNotifier<PendingJobRequest?> {
 
     final status = record['status'] as String?;
     if (status != 'pending') return;
+
+    if (!isInspected || isUnderReview) return;
+
+    final vehicleValueTier = record['vehicle_value_tier'] as String?;
+    if (vehicleValueTier == 'high' && tierCategory != 'Gold') return;
+
+    final isIntercity = record['is_intercity'] as bool? ?? false;
+    if (isIntercity && !openToIntercity) return;
 
     final vehicleType = record['vehicle_type_requested'] as String?;
     if (vehicleType != null &&
@@ -83,21 +101,27 @@ class DriverBookingNotifier extends StateNotifier<PendingJobRequest?> {
     state = PendingJobRequest(booking: booking, pickupDistanceKm: km);
   }
 
+  /// Calls the accept_booking RPC so only the first driver to accept gets the job (race-safe).
   Future<bool> acceptJob() async {
     final current = state;
     final id = driverId;
     if (current == null || id == null) return false;
 
     try {
-      await supabase.from('bookings').update({
-        'status': 'accepted',
-        'driver_id': id,
-        'updated_at': DateTime.now().toIso8601String(),
-      }).eq('id', current.booking.id);
-
+      final res = await supabase.rpc(
+        'accept_booking',
+        params: {
+          'p_booking_id': current.booking.id,
+          'p_driver_id': id,
+        },
+      );
       state = null;
-      return true;
+
+      final map = res as Map<String, dynamic>?;
+      final ok = map?['ok'] as bool?;
+      return ok == true;
     } catch (_) {
+      state = null;
       return false;
     }
   }
@@ -125,7 +149,8 @@ final currentDriverUserProvider = FutureProvider<User?>((ref) async {
   if (driverId == null) return null;
 
   try {
-    final response = await Supabase.instance.client
+    final client = ref.read(supabaseClientProvider);
+    final response = await client
         .from('users')
         .select()
         .eq('id', driverId)
@@ -144,7 +169,8 @@ final currentDriverTruckProvider = FutureProvider<TowTruck?>((ref) async {
   if (driverId == null) return null;
 
   try {
-    final response = await Supabase.instance.client
+    final client = ref.read(supabaseClientProvider);
+    final response = await client
         .from('tow_trucks')
         .select()
         .eq('driver_id', driverId)
@@ -158,17 +184,25 @@ final currentDriverTruckProvider = FutureProvider<TowTruck?>((ref) async {
 });
 
 /// Provider for pending job requests. Active when driver ID is set and has a truck.
+/// Excludes drivers not inspected (weekly audit) or under review (rating < 3.5).
+/// High-value jobs only go to Gold tier.
 final driverBookingProvider =
     StateNotifierProvider<DriverBookingNotifier, PendingJobRequest?>((ref) {
   final driverId = ref.watch(currentDriverIdProvider);
   final truckAsync = ref.watch(currentDriverTruckProvider);
+  final userAsync = ref.watch(currentDriverUserProvider);
   final truck = truckAsync.valueOrNull;
+  final user = userAsync.valueOrNull;
 
   return DriverBookingNotifier(
     driverId: driverId,
     driverTruckType: truck?.truckType,
-    supabase: Supabase.instance.client,
+    supabase: ref.watch(supabaseClientProvider),
     locationService: ref.watch(locationServiceProvider),
     maxDistanceKm: 10,
+    openToIntercity: truck?.openToIntercity ?? false,
+    isInspected: truck?.isInspected ?? true,
+    isUnderReview: user?.isUnderReview ?? false,
+    tierCategory: truck?.tierCategory,
   );
 });

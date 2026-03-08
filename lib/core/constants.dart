@@ -36,4 +36,14 @@ class AppConstants {
 
   /// Price range: base estimate ± this fraction for min/max (e.g. 0.1 = ±10%).
   static const double priceRangeVariance = 0.15;
+
+  // --- Intercity transport ---
+  /// Distance (km) above which a trip is treated as intercity (different city / long distance).
+  static const double intercityDistanceThresholdKm = 50.0;
+  /// Distance (km) above which discounted per-km rate applies for intercity.
+  static const double intercityDiscountThresholdKm = 100.0;
+  /// Multiplier for per-km rate when distance > [intercityDiscountThresholdKm] (e.g. 0.85 = 15% discount).
+  static const double intercityRateMultiplier = 0.85;
+  /// Estimated toll (currency) per km for highway/bridge on intercity routes.
+  static const double intercityTollPerKm = 0.25;
 }

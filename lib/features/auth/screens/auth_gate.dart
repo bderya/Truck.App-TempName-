@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../../../core/providers.dart';
+import '../providers/auth_state_provider.dart';
 import 'complete_profile_screen.dart';
 import 'phone_input_screen.dart';
 
@@ -21,7 +22,7 @@ class AuthGate extends ConsumerWidget {
           case AuthStatus.unauthenticated:
             return const PhoneInputScreen();
           case AuthStatus.needsProfile:
-            final phone = Supabase.instance.client.auth.currentUser?.phone;
+            final phone = ref.read(supabaseClientProvider).auth.currentUser?.phone;
             if (phone == null || phone.isEmpty) {
               return const PhoneInputScreen();
             }

@@ -1,5 +1,6 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import '../core/supabase_service.dart';
 import '../models/models.dart' show User;
 
 final RegExp _phoneE164Regex = RegExp(r'^\+?[1-9]\d{6,14}$');
@@ -47,6 +48,14 @@ class AuthService {
     );
   }
 
+  /// Unified login: verify SMS OTP then fetch profile (user_type) from users table.
+  /// Returns the app [User] with [User.userType] ('client' | 'driver') for routing.
+  /// Throws on invalid phone or OTP failure.
+  Future<User?> loginWithOtp(String phoneE164, String token) async {
+    await verifyOtp(phoneE164, token);
+    return SupabaseService.getProfileAfterAuth(phoneE164);
+  }
+
   /// Current session (persisted by Supabase Flutter SDK).
   Session? get currentSession => _client.auth.currentSession;
 
@@ -56,15 +65,9 @@ class AuthService {
   /// Sign out and clear session.
   Future<void> signOut() => _client.auth.signOut();
 
-  /// Fetches app user from public.users by [phoneNumber] (same format as in DB).
+  /// Fetches app user (profile) from public.users by [phoneNumber]. Includes [user_type].
   Future<User?> getUserByPhone(String phoneNumber) async {
-    final res = await _client
-        .from('users')
-        .select()
-        .eq('phone_number', phoneNumber)
-        .maybeSingle();
-    if (res == null) return null;
-    return User.fromJson(res as Map<String, dynamic>);
+    return SupabaseService.getProfileAfterAuth(phoneNumber);
   }
 
   /// Creates a new user in public.users (Complete Profile). [userType] default 'client'.
